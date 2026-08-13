@@ -6,44 +6,44 @@
   <img alt="Figwright" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/logo-full-light.svg" width="480" height="240">
 </picture>
 
-Where Playwright drives the browser, Figwright drives Figma.
+Playwright 驱动浏览器，Figwright 驱动 Figma。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![LAN listen mode](https://img.shields.io/badge/Feature-LAN%20listen%20mode-8a2be2)](https://github.com/heyxiaoze/figwright#lan-mode-connect-across-machines)
 
 </div>
 
-## What is Figwright?
+## Figwright 是什么？
 
-Figwright connects an **MCP server** to a **Figma plugin** over a local WebSocket relay, so an AI agent — Claude Code, Cursor, Codex, or any other MCP client — can work _with_ Figma instead of just looking at it.
+Figwright 通过本地 WebSocket 中继，把一个 **MCP 服务器** 连接到一个 **Figma 插件**，让 AI 智能体——Claude Code、Cursor、Codex，或任何支持 MCP 的客户端——能够真正「操作」Figma，而不只是看着它。
 
-It works in both directions:
+它的能力是双向的：
 
-**Read** — turn a Figma selection into framework-aware code, grounded on faithful, de-duplicated design context (layout, typography, variables, components).
+**读取**——将 Figma 选区转换为「懂框架」的代码，基于忠实且去重的设计上下文（布局、排版、变量、组件）。
 
 <p align="center">
   <img alt="Figwright turning a Figma selection into code" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/figma-to-code.gif" width="820">
 </p>
 
-**Write** — author and edit the canvas directly: frames, text, auto-layout, styles, variables, components, whole screens.
+**写入**——直接在画布上创作与编辑：画框、文本、自动布局、样式、变量、组件，乃至完整界面。
 
 <p align="center">
   <img alt="Figwright building a design directly on the Figma canvas" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/code-to-figma.gif" width="820">
 </p>
 
-Everything runs on your machine and talks to Figma through a plugin, so it needs **no Figma Dev Mode seat** and **no paid tier**.
+一切都运行在你的机器上，通过插件与 Figma 通信，因此**不需要 Figma Dev Mode 席位**，也**不需要付费套餐**。
 
-## Why Figwright
+## 为什么选择 Figwright
 
-- **Free** — no Figma Dev Mode or paid seat. The official Dev Mode MCP is gated; Figwright isn't.
-- **Bidirectional** — not read-only. **112 tools** span reading _and_ writing the canvas, so an agent can both implement designs and build them.
-- **Provider-first codegen** — Figwright detects your real stack (framework + styling system) and reuses your existing components, tokens, and icons, instead of emitting generic markup you have to rewrite.
-- **Any MCP client** — Claude Code, Cursor, and other MCP-capable agents all work the same way.
-- **Open & extensible** — the read/write workflows ship as installable [skills](#skills) you can adopt or fork.
+- **免费**——无需 Figma Dev Mode 或付费席位。官方的 Dev Mode MCP 有门槛，Figwright 没有。
+- **双向**——不只是只读。**112 个工具**覆盖画布的读取与写入，智能体既能实现设计，也能构建设计。
+- **以技术栈优先的代码生成**——Figwright 会识别你真实的技术栈（框架 + 样式系统），并复用你已有的组件、设计令牌与图标，而不是吐出一套你得重写的通用标记。
+- **任意 MCP 客户端**——Claude Code、Cursor 及其他支持 MCP 的智能体，工作方式完全一致。
+- **开放可扩展**——读写工作流以可安装的 [技能](#技能) 形式提供，你可采纳或直接 fork。
 
-## How it works
+## 工作原理
 
-Your MCP client talks to the `@figwright/mcp` server over stdio; the server relays to the Figma plugin over a local WebSocket. Several clients can share one plugin — they elect a leader that owns the connection — and the transport is built to ride out dropped sockets:
+你的 MCP 客户端通过 stdio 与 `@figwright/mcp` 服务器通信；服务器通过本地 WebSocket 把消息中继到 Figma 插件。多个客户端可以共享同一个插件——它们会选举出一个「领导者」来独占这条连接——并且传输层天生能扛住掉线重连：
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -82,41 +82,41 @@ Your MCP client talks to the `@figwright/mcp` server over stdio; the server rela
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-By design Figwright is **provider-first**: rather than a fixed compiler pipeline, the tools surface honest design context and let the model generate code that matches _your_ codebase. The [`figma-codegen`](#skills) skill encodes this approach.
+Figwright 在设计上就是 **以技术栈优先** 的：它不采用固定的编译管线，而是把忠实的设计上下文呈现出来，让模型生成契合 *你* 代码库的代码。[`figma-codegen`](#技能) 技能把这套方法固化了下来。
 
-## The plugin
+## 插件
 
-The Figma-side plugin isn't a black box. It shows every call as it happens, lets you inspect the exact payload sent to the model, and surfaces its own connection health.
+Figma 这一侧的插件不是黑盒。它会实时显示每一次调用，让你检查发送给模型的精确载荷，并展示自身的连接健康状态。
 
 <p align="center">
   <img alt="The Figwright panel: an activity log of tool calls, an expanded call showing the exact payload sent to the model, and a debug tab with connection and call statistics" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/plugin-panel.png" width="820">
 </p>
 
 <p align="center">
-  <sub><b>Activity</b> — every call, with timing and a jump to the nodes it touched · <b>Payload</b> — exactly what the model received · <b>Debug</b> — health, versions, and a one-click diagnostic bundle</sub>
+  <sub><b>活动</b>——每一次调用，带耗时并可跳转到它触及的节点 · <b>载荷</b>——模型实际收到的内容 · <b>调试</b>——健康状态、版本号，以及一键诊断包</sub>
 </p>
 
-And it follows your Figma theme, light or dark.
+而且它会跟随你的 Figma 主题，明亮或暗色皆可。
 
 <p align="center">
   <img alt="The same panel side by side in Figma's light and dark themes" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/plugin-theme.png" width="616">
 </p>
 
-The window is yours to arrange. Drag the bottom-right corner to resize it — a taller panel keeps more of the log in view, and the size is remembered next time you open it. Or send it to the background: the panel gets out of your way while the connection stays live, so a long-running agent keeps working.
+窗口随你摆放。拖动右下角即可缩放——面板越高，日志可见区域越大，并且尺寸会被记住，下次打开依旧。或者把它放到后台：面板让位给你，但连接保持活跃，这样长时间运行的智能体能持续工作。
 
 <p align="center">
   <img alt="The same panel at two sizes: a narrow one showing three calls with its resize corner highlighted, and a wider one showing five, with the run-in-background button highlighted in the header" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/plugin-window.png" width="602">
 </p>
 
 <p align="center">
-  <sub><b>Resize</b> — drag the corner, the size sticks · <b>Background</b> — the panel hides, the relay stays connected</sub>
+  <sub><b>缩放</b>——拖动角落，尺寸生效 · <b>后台</b>——面板隐藏，中继依然连接</sub>
 </p>
 
-## Quick start
+## 快速开始
 
-### 1. Build and run the server from this fork
+### 1. 从本仓库构建并运行服务器
 
-The LAN listen mode in this fork is **not** published to npm, so build the server from source:
+本仓库的 LAN 监听模式**尚未**发布到 npm，因此请从源码构建服务器：
 
 ```bash
 git clone https://github.com/heyxiaoze/figwright.git
@@ -125,7 +125,7 @@ pnpm install
 pnpm -C packages/mcp build
 ```
 
-Then point your MCP client at the built server. For Claude Code, add this to your `.mcp.json` (other clients use the same shape):
+然后把你的 MCP 客户端指向构建好的服务器。以 Claude Code 为例，把下面内容加入你的 `.mcp.json`（其他客户端格式相同）：
 
 ```json
 {
@@ -138,47 +138,47 @@ Then point your MCP client at the built server. For Claude Code, add this to you
 }
 ```
 
-For LAN mode, add an `env` block with `FIGWRIGHT_HOST` and `FIGWRIGHT_TOKEN` — see [LAN mode](#lan-mode-connect-across-machines) and `.mcp.json.lan.example`.
+若要启用 LAN 模式，请添加一个 `env` 字段，写入 `FIGWRIGHT_HOST` 和 `FIGWRIGHT_TOKEN`——详见 [LAN 模式](#lan-mode-connect-across-machines) 与 `.mcp.json.lan.example`。
 
-### 2. Install the Figma plugin
+### 2. 安装 Figma 插件
 
-The plugin isn't on the Figma Community marketplace yet, so install it from the latest release:
+该插件尚未上架 Figma 社区市场，请从最新的 Release 安装：
 
-1. Download the plugin zip from the [**latest GitHub Release**](https://github.com/heyxiaoze/figwright/releases/latest) and unzip it.
-2. In the Figma **desktop app**: **Menu → Plugins → Development → Import plugin from manifest…** and pick the unzipped `manifest.json`.
+1. 从 [**最新 GitHub Release**](https://github.com/heyxiaoze/figwright/releases/latest) 下载插件 zip 并解压。
+2. 在 Figma **桌面客户端**中：**菜单 → 插件 → 开发 → 从清单导入插件…**，选择解压后的 `manifest.json`。
 
-### 3. Connect
+### 3. 连接
 
-Open the Figwright plugin in Figma (**Plugins → Development → Figwright**). It connects to the local server automatically and shows **Connected**. Ask your agent to run `ping` to confirm the link.
+在 Figma 中打开 Figwright 插件（**插件 → 开发 → Figwright**）。它会自动连接到本地服务器并显示 **已连接**。让智能体运行 `ping` 以确认链路通畅。
 
-### 4. (Optional) Install the skills
+### 4.（可选）安装技能
 
-The [skills](#skills) make agents reach for Figwright at the right moment and follow the grounded workflows:
+[技能](#技能) 让智能体在恰当的时机调用 Figwright，并遵循这些扎根于上下文的工作流：
 
 ```bash
 npx skills add heyxiaoze/figwright/skills
 ```
 
-### 5. Try it
+### 5. 上手试试
 
-With a frame selected in Figma, prompt your agent:
+在 Figma 中选中一个画框，给你的智能体这样提示：
 
 > _Code this Figma selection as a React component._
 
-or, the other direction:
+或者反过来：
 
 > _Build a pricing section in Figma from this spec._
 
-## Skills
+## 技能
 
-Agent skills orchestrate Figwright's tools. They're model-invoked — your agent loads one automatically when the task matches its description.
+智能体技能编排 Figwright 的工具。它们由模型触发——当任务与描述匹配时，你的智能体会自动加载对应的技能。
 
-| Skill                                              | What it does                                                                                        |
-| :------------------------------------------------- | :-------------------------------------------------------------------------------------------------- |
-| [`figma‑codegen`](./skills/figma-codegen/SKILL.md) | Turn a Figma selection into framework-aware code, grounded on your stack and existing components.   |
-| [`figma‑build`](./skills/figma-build/SKILL.md)     | Build a Figma design from code or a description, reusing the file's existing components and styles. |
+| 技能 | 作用 |
+| :--- | :--- |
+| [`figma‑codegen`](./skills/figma-codegen/SKILL.md) | 把 Figma 选区转换成懂框架的代码，基于你的技术栈与已有组件。 |
+| [`figma‑build`](./skills/figma-build/SKILL.md) | 从代码或描述构建 Figma 设计，复用文件中已有的组件与样式。 |
 
-Install across any supported agent with the [`skills`](https://www.skills.sh) CLI:
+通过 [`skills`](https://www.skills.sh) CLI 安装到任意支持的智能体：
 
 ```bash
 npx skills add heyxiaoze/figwright/skills      # both
@@ -186,48 +186,48 @@ npx skills add https://github.com/heyxiaoze/figwright/tree/main/skills/figma-cod
 ```
 
 > [!NOTE]
-> Skills need the `@figwright/mcp` server connected — on their own they have no tools to drive.
+> 技能需要 `@figwright/mcp` 服务器处于连接状态——离开了它，技能本身没有任何工具可驱动。
 
-## Tools
+## 工具
 
-Figwright exposes **112 MCP tools** in three groups:
+Figwright 提供 **112 个 MCP 工具**，分为三组：
 
-- **Read** — selection, document and node inspection, styles, variables, components, fonts, reactions, motion (animation) state, screenshots, original image-fill assets, PDF export, and video export of animated frames (MP4 / GIF / WebM).
-- **Write** — create and edit frames, text, shapes, auto-layout, effects, styles, variables, components (including authoring their boolean/text/instance-swap properties), pages, reactions, and Motion animations (keyframes, animation-style presets, timelines); plus a `batch` tool to apply many edits at once.
-- **Grounding** — `get_design_context` for faithful, de-duplicated design context, and `component_map` / `token_map` / `icon_map`, which join Figma data to your codebase so codegen reuses what you already have; plus `design_diff`, which reports what changed in a design against a saved baseline so you update only the affected code.
+- **读取**——选区、文档与节点检查、样式、变量、组件、字体、反应（reactions）、动效（motion）状态、截图、原始图片填充资源、PDF 导出，以及动画画框的视频导出（MP4 / GIF / WebM）。
+- **写入**——创建并编辑画框、文本、图形、自动布局、效果、样式、变量、组件（含编写布尔/文本/实例替换属性）、页面、反应，以及 Motion 动画（关键帧、动画风格预设、时间轴）；外加一个 `batch` 工具可一次性应用大量编辑。
+- **上下文夯实**——`get_design_context` 提供忠实且去重的设计上下文；`component_map` / `token_map` / `icon_map` 把 Figma 数据与你的代码库关联起来，让代码生成复用你已有的东西；另有 `design_diff`，它能报告设计相对已存基线的变动，使你只更新受影响的代码。
 
 > [!TIP]
-> Your MCP client lists every tool at connect time — that's always the authoritative, up-to-date catalog.
+> 你的 MCP 客户端在连接时会列出全部工具——那才是最权威、最新的清单。
 
-## Requirements
+## 运行要求
 
-- An **MCP client** (Claude Code, Cursor, …).
-- **Node.js 20.19+ or 22.12+** — the server runs via `npx`, as its own process, so this is independent of the Node version your project builds with. (This is the modern-Node baseline; Node 18/21 and 22.0–22.11 aren't supported.)
-- **Figma** — the free tier is enough; the desktop app is needed to import the plugin in development.
+- 一个 **MCP 客户端**（Claude Code、Cursor……）。
+- **Node.js 20.19+ 或 22.12+**——服务器通过 `npx` 作为独立进程运行，因此与你项目构建所用的 Node 版本无关。（这是现代 Node 基线；Node 18/21 以及 22.0–22.11 不受支持。）
+- **Figma**——免费版即可满足；开发模式下导入插件需要桌面客户端。
 
-## Security
+## 安全
 
-Figwright runs entirely on your machine: your client launches the server over stdio, the server relays to the plugin over a WebSocket on `127.0.0.1:3055`, and nothing is sent anywhere else. The plugin uses only Figma's public Plugin API, so it reaches the file you have open and nothing beyond it.
+Figwright 完全运行在你的机器上：你的客户端通过 stdio 启动服务器，服务器通过 `127.0.0.1:3055` 上的 WebSocket 把消息中继给插件，数据不会发往任何别处。插件只使用 Figma 公开的 Plugin API，因此它只能访问你当前打开的文件，不会越界。
 
-Loopback is not on its own a boundary — a web page you visit can still reach a local port — so the relay gates every request on two headers a page cannot forge: **`Host`**, which must name loopback (this is what stops DNS rebinding), and **`Origin`**, which admits the plugin's sandboxed handshake and refuses browsers everywhere else. The leader's HTTP endpoints additionally require a media type that cannot be sent without a CORS preflight. See [MCP Security Best Practices](https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices) for the wider picture, and [SECURITY.md](./SECURITY.md) for Figwright's threat model, what is in and out of scope, and how to report a vulnerability privately.
+回环地址本身并不是一道边界——你访问的网页仍可能连上本地端口——因此中继对每一个请求都基于两个网页无法伪造的请求头进行校验：**`Host`**（必须指向回环地址，这正是阻止 DNS 重绑定的关键）与 **`Origin`**（仅放行插件沙箱内的握手，拒绝来自其他浏览器的请求）。领导者的 HTTP 端点还要求一种不经过 CORS 预检就无法发送的内容类型。更宏观的视角请参见 [MCP 安全最佳实践](https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices)；Figwright 的威胁模型、范围边界以及漏洞私下上报方式，详见 [SECURITY.md](./SECURITY.md)。
 
-**Figwright is not a substitute for reviewing what your agent does.** Its write tools change your Figma file and its export tools write files to paths the agent chooses; an agent acting on a malicious design or a prompt-injected instruction can misuse both. Your MCP client's tool-approval controls are the boundary that matters.
+**Figwright 不能替代你对智能体行为的审查。** 它的写入工具会改动你的 Figma 文件，导出工具会把文件写到智能体所选的路径；一个针对恶意设计或被提示注入操控的智能体，可能滥用这两者。真正起作用的边界，是你 MCP 客户端的工具审批控制。
 
 ## LAN mode (connect across machines)
 
-By default the relay listens on `127.0.0.1` — loopback only — so the plugin must run on the **same machine** as your MCP client. LAN mode binds the relay to a network interface instead, so a plugin on **another machine on the same network** (or the same machine reached via its LAN address) can connect to it.
+默认情况下，中继只监听 `127.0.0.1`——即仅回环——因此插件必须与你的 MCP 客户端运行在**同一台机器**上。LAN 模式改为把中继绑定到某个网络接口，这样**同一网络下另一台机器**上的插件（或通过本机 LAN 地址访问的本机插件）就能连上来。
 
-### Configure the server
+### 配置服务器
 
-The server reads three environment variables. `FIGWRIGHT_PORT` already exists; the two new ones gate LAN mode:
+服务器读取三个环境变量。`FIGWRIGHT_PORT` 此前已存在；另外两个新变量用于开关 LAN 模式：
 
-| Variable | Default | Meaning |
+| 变量 | 默认值 | 含义 |
 | :--- | :--- | :--- |
-| `FIGWRIGHT_HOST` | `127.0.0.1` | The host the relay binds. Use a LAN IP (e.g. `192.168.1.42`) or `0.0.0.0` to listen on every interface. **Any non-loopback value turns on LAN mode.** |
-| `FIGWRIGHT_TOKEN` | *(auto)* | The shared secret a connecting plugin must present. In LAN mode, if you leave this unset the server generates a random 24-byte token at startup and prints it in the logs. Set it to a stable value so the plugin config survives restarts. |
-| `FIGWRIGHT_PORT` | `3055` | The relay port. |
+| `FIGWRIGHT_HOST` | `127.0.0.1` | 中继绑定的主机。填一个 LAN IP（如 `192.168.1.42`）或 `0.0.0.0` 即可监听所有接口。**任何非回环的值都会开启 LAN 模式。** |
+| `FIGWRIGHT_TOKEN` | *(自动)* | 连接插件必须出示的共享密钥。在 LAN 模式下，若未设置，服务器会在启动时生成一个随机的 24 字节令牌并打印到日志。请设成一个稳定值，这样插件配置在重启后依然有效。 |
+| `FIGWRIGHT_PORT` | `3055` | 中继端口。 |
 
-Example `.mcp.json` (a ready-to-use copy lives at [`.mcp.json.lan.example`](./.mcp.json.lan.example)):
+`.mcp.json` 示例（开箱即用的副本见 [`.mcp.json.lan.example`](./.mcp.json.lan.example)）：
 
 ```json
 {
@@ -244,40 +244,40 @@ Example `.mcp.json` (a ready-to-use copy lives at [`.mcp.json.lan.example`](./.m
 }
 ```
 
-With `0.0.0.0` the relay listens on every interface; `ping` then reports a `lanUrl` listing each reachable `ws://<ip>:<port>` target. Binding to a concrete LAN IP is slightly tighter.
+使用 `0.0.0.0` 时，中继监听所有接口；此时 `ping` 会返回一个 `lanUrl`，列出每个可达的 `ws://<ip>:<port>` 目标。绑定到具体的 LAN IP 则收紧一些。
 
-### Connect the plugin
+### 连接插件
 
-Open the plugin in Figma on the other machine and switch to the new **Settings** tab. Enter:
+在另一台机器的 Figma 中打开插件，切到新的 **设置（Settings）** 标签页，填入：
 
-- **Host** — the server machine's LAN IP (or one of `0.0.0.0`'s reported interface addresses).
-- **Port** — `FIGWRIGHT_PORT` (default `3055`).
-- **Token** — the `FIGWRIGHT_TOKEN` you set (or the auto-generated one from the server logs).
+- **主机（Host）**——服务器所在机器的 LAN IP（或 `0.0.0.0` 所报告的网络接口地址之一）。
+- **端口（Port）**——`FIGWRIGHT_PORT`（默认 `3055`）。
+- **令牌（Token）**——你设置的 `FIGWRIGHT_TOKEN`（或服务器日志中自动生成的那个）。
 
-Save, and the plugin reconnects to the remote relay. The Settings tab validates that a token is present whenever the host isn't loopback, and **Reset to loopback** returns to the default `127.0.0.1:3055` with no token.
+保存后，插件会重新连接到远程中继。设置标签页会在主机非回环时强制要求填写令牌；而 **恢复为回环** 按钮会回到默认的 `127.0.0.1:3055` 且不含令牌。
 
-You can also ask your agent to run `ping`: in LAN mode its result includes `lanUrl` and `token`, so the agent can hand you the exact `ws://…` target and token to paste into the plugin.
+你也可以让智能体运行 `ping`：在 LAN 模式下，其结果会包含 `lanUrl` 和 `token`，于是智能体能把精确的 `ws://…` 目标与令牌交给你，方便粘贴进插件。
 
-### Security model in LAN mode
+### LAN 模式下的安全模型
 
-Opening the relay to the network **removes the loopback boundary** that the default deployment relies on, so LAN mode is *not* the same as the safe local-only setup. To compensate:
+把中继暴露到网络上，**会移除默认部署所依赖的回环边界**，因此 LAN 模式与安全的「仅本地」部署 *并不* 等同。为此：
 
-- **Token auth is mandatory.** Every WebSocket upgrade must present the token as a WebSocket subprotocol *and* in the `$hello` handshake, and every mutating HTTP POST (`/rpc`, `/abdicate`) must carry an `x-figwright-token` header. Requests without a valid token are refused (403). On loopback, no token is used.
-- **The `Host` gate stays on**, just widened. The relay still validates the `Host` header — it now admits LAN addresses in addition to loopback, and rejects anything that names a foreign host — preserving the DNS-rebinding defense. Read-only `/ping` remains publicly reachable so you can discover the server, but it never reveals more than connection info.
-- **Link-local and internal-only addresses are filtered** from the advertised `lanUrl` so you don't accidentally hand out an unreachable target.
+- **令牌认证是强制的。** 每一次 WebSocket 升级都必须以 WebSocket 子协议 *和* `$hello` 握手两种方式出示令牌；每一个会改变状态的 HTTP POST（`/rpc`、`/abdicate`）都必须携带 `x-figwright-token` 请求头。缺少有效令牌的请求会被拒绝（403）。回环模式下则不使用令牌。
+- **`Host` 闸门依然开启**，只是范围放宽。中继仍会校验 `Host` 头——现在除了回环地址，也放行 LAN 地址，但拒绝任何指向外部主机的请求——从而保住 DNS 重绑定防御。只读的 `/ping` 仍可被公开访问，便于你发现服务器，但它绝不会泄露超出连接信息之外的内容。
+- **链路本地与仅内部的地址会被过滤**——在公布的 `lanUrl` 中剔除这类地址，避免你不小心给出一个不可达的目标。
 
-Treat the token like a password: anyone who learns it (and can reach the port) can drive your Figma plugin. Keep LAN mode behind a trusted network, pin `FIGWRIGHT_TOKEN`, and don't expose the port past your firewall. If you only need the plugin on the same machine, stay on the default loopback bind — no token, no network surface at all.
+请把令牌当作密码对待：任何人只要得知它（且能访问该端口），就能驱动你的 Figma 插件。请将 LAN 模式置于可信网络之后，固定 `FIGWRIGHT_TOKEN`，并不要让端口越过防火墙暴露出去。如果你只需要在同一台机器上使用插件，就保持默认的回环绑定——无令牌，也无任何网络暴露面。
 
-## FAQ
+## 常见问题（FAQ）
 
 <details>
-<summary><strong>The server won't start — <code>command not found</code>, or it fails / disconnects with <code>-32000</code> ("Connection closed").</strong></summary>
+<summary><strong>服务器无法启动——<code>command not found</code>，或以 <code>-32000</code>（"Connection closed"）失败/断开。</strong></summary>
 
-Both come down to how your MCP client launches the server: it spawns the `command` directly, **not** through your interactive shell, so it inherits none of what your shell sets up. That bites hardest when Node is managed by a version manager (**fnm, nvm, asdf, volta, mise**), since those configure `PATH` and npm from shell hooks that only run in a real terminal. It isn't specific to Figwright — it affects any `npx`-launched MCP server. There are two symptoms, with two different fixes.
+两者都源于你的 MCP 客户端启动服务器的方式：它直接 `spawn` 那个 `command`，**而非**通过你的交互式 shell，因此它不会继承你在 shell 里设置的任何环境。当 Node 由版本管理器（**fnm、nvm、asdf、volta、mise**）管理时，这一点最致命——它们通过只在真实终端里才运行的 shell 钩子来配置 `PATH` 和 npm。这并非 Figwright 特有——任何以 `npx` 启动的 MCP 服务器都会受影响。下面有两种症状，对应两种不同的修复。
 
-**`command not found` — the client can't find `npx` / `node` on its `PATH`.**
+**`command not found`——客户端在 `PATH` 上找不到 `npx` / `node`。**
 
-- **Use an absolute path.** In a normal terminal run `which npx` (or `which node`) and use that full path as `command`:
+- **使用绝对路径。** 在普通终端里运行 `which npx`（或 `which node`），把得到的完整路径作为 `command`：
 
   ```json
   {
@@ -290,15 +290,15 @@ Both come down to how your MCP client launches the server: it spawns the `comman
   }
   ```
 
-- **Or pass `PATH` through `env`.** If your client supports a per-server `env`, add your version manager's `bin` directory to `env.PATH`.
+- **或者通过 `env` 传递 `PATH`。** 若你的客户端支持按服务器的 `env`，把版本管理器的 `bin` 目录加入 `env.PATH`。
 
-**`-32000` / "Connection closed" / it just never connects — `npx` runs, but the server exits before the handshake.**
+**`-32000` / "Connection closed" / 始终连不上——`npx` 能跑起来，但服务器在握手前就退出了。**
 
-`npx … @latest` re-resolves the package from the registry on **every** launch. In a directly-spawned environment that step can fail or stall — empty or different npm config, a corporate proxy or private registry that isn't configured there, or no network — so the process dies before MCP connects and the client reports the connection as closed. (A missing `node` for the binary's shebang lands here too.)
+`npx … @latest` 会在**每次**启动时都重新从注册表解析包。在直接 spawn 的环境里，这一步可能失败或卡住——npm 配置为空或与预期不同、公司代理或私有注册表在那里未配置、或根本没有网络——于是进程在 MCP 连接前就死掉，客户端便报告连接已关闭。（二进制脚本的 shebang 找不到 `node` 也会落到这里。）
 
-The fix is to install the package so launch needs no registry fetch:
+修复办法是把包安装好，让启动不再需要拉取注册表：
 
-- **As a project dependency — the quickest unblock.** Install it, then **drop `@latest`** from your config. The `@latest` tag is what forces the registry round-trip; without it, `npx` uses the copy already in `node_modules` (a project-scoped config like Claude Code's `.mcp.json` runs from your project root):
+- **作为项目依赖——最快的解法。** 先安装它，然后从配置里**去掉 `@latest`**。`@latest` 这个标签正是强制走注册表的元凶；去掉后，`npx` 会直接用 `node_modules` 里已有的副本（像 Claude Code 的 `.mcp.json` 这种项目级配置，会从你的项目根目录运行）：
 
   ```bash
   pnpm add -D @figwright/mcp   # or: npm i -D @figwright/mcp
@@ -315,7 +315,7 @@ The fix is to install the package so launch needs no registry fetch:
   }
   ```
 
-- **Or globally, pinned to the binary.** Install once, then point `command` straight at it — no `npx`, no per-launch resolution. Use the absolute path from `which figwright-mcp`:
+- **或者全局安装，直接指向二进制。** 安装一次，然后把 `command` 直接指向它——没有 `npx`，也没有每次启动的解析。用 `which figwright-mcp` 得到的绝对路径：
 
   ```bash
   npm i -g @figwright/mcp
@@ -335,55 +335,55 @@ The fix is to install the package so launch needs no registry fetch:
 </details>
 
 <details>
-<summary><strong>The plugin stays on "Waiting" and never connects.</strong></summary>
+<summary><strong>插件一直停留在"Waiting"，始终连不上。</strong></summary>
 
-The server is launched by your MCP client, so it only runs while that client is open. Check that:
+服务器由你的 MCP 客户端启动，因此只有当该客户端开着时它才运行。请检查：
 
-- your MCP client is running and has Figwright configured (try a `ping`);
-- the plugin is open in the **same** Figma app on the same machine (the relay is local-only, `127.0.0.1`);
-- nothing is blocking local loopback connections (some firewall / security tools do).
-
-</details>
-
-<details>
-<summary><strong>Do I need a paid Figma plan or Dev Mode?</strong></summary>
-
-No. Figwright talks to Figma through a plugin, so the free tier is enough — no Dev Mode seat or paid tier required.
+- 你的 MCP 客户端正在运行，且已配置 Figwright（试试 `ping`）；
+- 插件已在**同一**台机器的同一个 Figma 应用中打开（中继仅本地，`127.0.0.1`）；
+- 没有任何东西阻断本地回环连接（某些防火墙/安全软件会这么做）。
 
 </details>
 
 <details>
-<summary><strong>Does it work in Dev Mode and FigJam?</strong></summary>
+<summary><strong>我需要付费的 Figma 套餐或 Dev Mode 吗？</strong></summary>
 
-It runs in both, with less available than in Figma Design — because those editors give plugins less, not because Figwright holds anything back.
-
-- **Figma Design** — everything.
-- **Dev Mode** (Inspect panel) — reads and exports only. Figma makes plugins read-only there, so screenshots, PDF export and every inspection tool work, while every write fails — nodes, pages, variables and styles alike. That suits the codegen direction; use Design mode to build.
-- **FigJam** — frames, sections, shapes and text work; components, variables, styles and Motion don't exist in that editor, so the tools for them don't apply.
-
-`get_metadata` reports the editor (`editorType` / `mode`), and any tool that fails because of the editor says so in its error, so an agent can re-plan rather than retry.
+不需要。Figwright 通过插件与 Figma 通信，因此免费版就够——无需 Dev Mode 席位，也无需付费套餐。
 
 </details>
 
 <details>
-<summary><strong>Can more than one agent use the same plugin at once?</strong></summary>
+<summary><strong>它在 Dev Mode 和 FigJam 中可用吗？</strong></summary>
 
-Yes. Several MCP servers can share a single plugin via leader/follower **election** — one leads, the others follow, with a graceful handoff if the leader goes away.
+这两个环境它都能运行，但可用能力少于 Figma Design——这是因为那些编辑器给插件的权限更少，并非 Figwright 有所保留。
+
+- **Figma Design**——一切功能。
+- **Dev Mode**（检查面板）——仅读取与导出。Figma 在该模式下让插件处于只读状态，因此截图、PDF 导出以及所有检查工具都能用，而所有写入都会失败——节点、页面、变量、样式全都如此。这契合代码生成方向；要构建请使用 Design 模式。
+- **FigJam**——画框、分区、图形与文本可用；组件、变量、样式以及 Motion 在该编辑器中并不存在，因此针对它们的工具不适用。
+
+`get_metadata` 会报告编辑器（`editorType` / `mode`），任何因编辑器限制而失败的工具也会在错误中说明，于是智能体可以重新规划，而不是盲目重试。
 
 </details>
 
-## Contributing
+<details>
+<summary><strong>多个智能体能同时使用同一个插件吗？</strong></summary>
 
-Contributions are welcome. See **[CONTRIBUTING.md](./CONTRIBUTING.md)** for how to get set up and open a pull request, and **[AGENTS.md](./AGENTS.md)** for the architecture, repo layout, tech stack, and conventions.
+可以。多个 MCP 服务器可以通过领导者/追随者 **选举** 机制共享同一个插件——一个主导，其余跟随；若领导者退出，会平滑交接。
 
-## What's in the name
+</details>
 
-`figwright` follows the **_-wright_** tradition — an old English word for a maker or craftsman: a **playwright** writes plays, a **shipwright** builds ships, a **wheelwright**, wheels. The name is a nod to [**Playwright**](https://playwright.dev), which automates the browser. Where Playwright drives the browser, **Figwright** drives Figma — a maker of designs that both reads the canvas and crafts work back onto it.
+## 贡献指南
 
-## Acknowledgements
+欢迎贡献。关于如何搭建环境并提交 Pull Request，请参阅 **[CONTRIBUTING.md](./CONTRIBUTING.md)**；关于架构、仓库布局、技术栈与规范，请参阅 **[AGENTS.md](./AGENTS.md)**。
 
-Figwright began as [**figwright**](https://github.com/awdr74100/figwright) by [**@awdr74100**](https://github.com/awdr74100) (Roya), released under the MIT License. This project builds on that foundation — thank you for open-sourcing it.
+## 名称由来
 
-## License
+`figwright` 沿用了 **_-wright_** 的传统——这是一个古英语词，意为「制造者」或「工匠」：playwright 写戏剧，shipwright 造船，wheelwright 造轮子。这个名字也向自动化的浏览器工具 [**Playwright**](https://playwright.dev) 致意。Playwright 驱动浏览器，**Figwright** 驱动 Figma——一个既读取画布、又把作品创作回画布上的「设计工匠」。
+
+## 致谢
+
+Figwright 起源于 [**@awdr74100**](https://github.com/awdr74100)（Roya）发布的 [**figwright**](https://github.com/awdr74100/figwright)，采用 MIT 许可证。本项目建立在这一基础之上——感谢其开源。
+
+## 许可证
 
 [MIT](./LICENSE) © Roya
