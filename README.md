@@ -12,8 +12,14 @@ Where Playwright drives the browser, Figwright drives Figma.
 [![CI](https://github.com/awdr74100/figwright/actions/workflows/ci.yml/badge.svg)](https://github.com/awdr74100/figwright/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Glama MCP server](https://glama.ai/mcp/servers/awdr74100/figwright/badges/score.svg)](https://glama.ai/mcp/servers/awdr74100/figwright)
+[![Fork of awdr74100/figwright](https://img.shields.io/badge/Fork%20of-awdr74100%2Ffigwright-8a2be2?logo=github)](https://github.com/awdr74100/figwright)
 
 </div>
+
+> 🍴 **A personal fork of [figwright](https://github.com/awdr74100/figwright) by [@awdr74100](https://github.com/awdr74100).**
+> This fork adds **[LAN listen mode](#lan-mode-connect-across-machines)** — connect the Figma plugin from another machine on your network. All core design and tooling credit goes to the original author; please ⭐ the [upstream repo](https://github.com/awdr74100/figwright).
+
+
 
 ## What is Figwright?
 
@@ -372,6 +378,12 @@ Contributions are welcome. See **[CONTRIBUTING.md](./CONTRIBUTING.md)** for how 
 ## What's in the name
 
 `figwright` follows the **_-wright_** tradition — an old English word for a maker or craftsman: a **playwright** writes plays, a **shipwright** builds ships, a **wheelwright**, wheels. The name is a nod to [**Playwright**](https://playwright.dev), which automates the browser. Where Playwright drives the browser, **Figwright** drives Figma — a maker of designs that both reads the canvas and crafts work back onto it.
+
+## Acknowledgements
+
+This project is a **personal fork** of [**figwright**](https://github.com/awdr74100/figwright) by [**@awdr74100**](https://github.com/awdr74100) (Roya). All credit for the core project — its architecture, the 112-tools bidirectional bridge, and the plugin — belongs to the original author. This fork layers a **[LAN listen mode](#lan-mode-connect-across-machines)** on top and changes nothing about how the upstream project works.
+
+If you find the underlying project useful, please ⭐ the [original repository](https://github.com/awdr74100/figwright) and support upstream development.
 
 ## License
 
