@@ -68,6 +68,13 @@ export interface PingServerInfo {
    * tab. Absent on the default loopback bind, where no token is used.
    */
   token?: string;
+  /**
+   * LAN mode only: a single copy-pasteable connection string (`figwright://connect?host=&port=&token=`)
+   * the operator can hand to the plugin user. Parsed by the plugin's Settings tab ("粘贴邀请") to
+   * auto-fill host/port/token, so the user never transcribes the 32-char token by hand. Absent on
+   * the default loopback bind.
+   */
+  invite?: string;
 }
 
 /**
@@ -141,7 +148,16 @@ const serverInfo = (ctx: PingContext): PingServerInfo => {
         : [ctx.bindHost];
     info.bindHost = ctx.bindHost;
     info.lanUrl = hosts.map(h => `ws://${h}:${port}`).join(', ');
-    if (ctx.token !== undefined) info.token = ctx.token;
+    if (ctx.token !== undefined) {
+      info.token = ctx.token;
+      // A single copy-pasteable string so the operator can hand the cross-machine target to the
+      // plugin user without transcribing a 32-char token by hand. Parsed by the plugin's Settings
+      // tab ("粘贴邀请") to auto-fill host/port/token.
+      const inviteHost = hosts[0] ?? ctx.bindHost;
+      if (inviteHost !== undefined) {
+        info.invite = `figwright://connect?host=${encodeURIComponent(inviteHost)}&port=${port}&token=${encodeURIComponent(ctx.token)}`;
+      }
+    }
   }
   return info;
 };

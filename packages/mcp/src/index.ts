@@ -292,6 +292,17 @@ if (LAN_MODE && TOKEN !== undefined) {
   for (const h of hosts) {
     log(`[figwright] plugin → ws://${h}:${PORT}  (token: ${TOKEN})`);
   }
+  // One-line copy-paste invite: the operator pastes this into the plugin's Settings tab to fill
+  // host/port/token automatically — no transcribing the token by hand.
+  if (TOKEN !== undefined && hosts.length > 0) {
+    const inviteHost = hosts[0];
+    if (inviteHost !== undefined) {
+      log(
+        `[figwright] invite: figwright://connect?host=${encodeURIComponent(inviteHost)}` +
+          `&port=${PORT}&token=${encodeURIComponent(TOKEN)}`,
+      );
+    }
+  }
 }
 
 const shutdown = async (): Promise<void> => {

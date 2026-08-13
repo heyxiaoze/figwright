@@ -62,6 +62,7 @@ const embedded = computed(() => context.value !== null && isEmbeddedInPanel(cont
           :host="settings.host"
           :port="state.port"
           :connected-at="state.connectedAt"
+          :last-error="state.lastError"
         />
         <PanelBackgroundButton v-if="!embedded" />
       </div>
@@ -102,7 +103,12 @@ const embedded = computed(() => context.value !== null && isEmbeddedInPanel(cont
             :connected="state.status === 'connected'"
           />
           <TabContext v-else-if="tab === 'context'" :context="context" />
-          <TabSettings v-else-if="tab === 'settings'" :settings="settings" :save="save" />
+          <TabSettings
+            v-else-if="tab === 'settings'"
+            :settings="settings"
+            :save="save"
+            :state="state"
+          />
           <TabDebug
             v-else
             :state="state"

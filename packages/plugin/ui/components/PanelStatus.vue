@@ -11,6 +11,8 @@ const props = defineProps<{
   host: string;
   port: number | null;
   connectedAt: number | null;
+  /** Most-recent connection failure reason (e.g. token rejected, host unreachable). */
+  lastError?: string | null;
 }>();
 
 const STATUS_LABEL = {
@@ -45,18 +47,29 @@ const meta = computed(() => {
       : ` · up ${formatRelativeTime(props.connectedAt, now.value.getTime())}`;
   return `ws://${host}${port}${up}`;
 });
+
+// The raw failure reason, shown only while not connected so a transient "looking for a server that
+// isn't up yet" doesn't read as an error — but a real refusal (bad token, unreachable host) does.
+const errorHint = computed(() =>
+  props.status === 'connected' ? null : (props.lastError ?? null),
+);
 </script>
 
 <template>
-  <div class="flex items-center gap-2.5">
-    <span class="relative flex size-2 shrink-0" :class="STATUS_TONE[status]">
-      <span v-if="settling" class="absolute inset-0 animate-ping-ring rounded-full bg-current" />
-      <span
-        class="relative size-2 rounded-full bg-current"
-        :class="status === 'connected' ? 'shadow-[0_0_7px_currentColor]' : ''"
-      />
-    </span>
-    <span class="font-medium tracking-tight text-fg">{{ STATUS_LABEL[status] }}</span>
-    <span class="ml-auto min-w-0 truncate text-meta text-faint tabular-nums">{{ meta }}</span>
+  <div class="min-w-0 flex-1">
+    <div class="flex items-center gap-2.5">
+      <span class="relative flex size-2 shrink-0" :class="STATUS_TONE[status]">
+        <span v-if="settling" class="absolute inset-0 animate-ping-ring rounded-full bg-current" />
+        <span
+          class="relative size-2 rounded-full bg-current"
+          :class="status === 'connected' ? 'shadow-[0_0_7px_currentColor]' : ''"
+        />
+      </span>
+      <span class="font-medium tracking-tight text-fg">{{ STATUS_LABEL[status] }}</span>
+      <span class="ml-auto min-w-0 truncate text-meta text-faint tabular-nums">{{ meta }}</span>
+    </div>
+    <p v-if="errorHint" class="mt-1 truncate text-meta text-danger" :title="errorHint">
+      {{ errorHint }}
+    </p>
   </div>
 </template>

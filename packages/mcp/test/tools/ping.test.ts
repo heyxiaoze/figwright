@@ -240,4 +240,47 @@ describe('ping tool', () => {
     expect(result.server.versionSkew).toBeUndefined();
     expect(result.server.buildSkew).toBeUndefined();
   });
+
+  it('surfaces an invite string in LAN mode with a token', async () => {
+    const node = makeNode({
+      role: NodeRole.Leader,
+      isLeader: () => true,
+      getLeader: () =>
+        ({
+          port: 3055,
+          relay: { sessions: { connected: () => [] } },
+          http: undefined as never,
+        }) as unknown as ReturnType<Node['getLeader']>,
+    });
+    const result = await handlePing({
+      node,
+      follower: makeFollower({}),
+      serverVersion: '1.0.0',
+      bindHost: '192.168.1.50',
+      token: 'secret-token',
+    });
+    expect(result.server.bindHost).toBe('192.168.1.50');
+    expect(result.server.lanUrl).toBe('ws://192.168.1.50:3055');
+    expect(result.server.token).toBe('secret-token');
+    expect(result.server.invite).toBe(
+      'figwright://connect?host=192.168.1.50&port=3055&token=secret-token',
+    );
+  });
+
+  it('omits invite + token on the default loopback bind', async () => {
+    const node = makeNode({
+      role: NodeRole.Leader,
+      isLeader: () => true,
+      getLeader: () =>
+        ({
+          port: 3055,
+          relay: { sessions: { connected: () => [] } },
+          http: undefined as never,
+        }) as unknown as ReturnType<Node['getLeader']>,
+    });
+    const result = await handlePing({ node, follower: makeFollower({}), serverVersion: '1.0.0' });
+    expect(result.server.bindHost).toBeUndefined();
+    expect(result.server.token).toBeUndefined();
+    expect(result.server.invite).toBeUndefined();
+  });
 });
