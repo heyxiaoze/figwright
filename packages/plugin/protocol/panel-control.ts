@@ -31,6 +31,8 @@
  * of a package that has three.
  */
 
+import { DEFAULT_PORT } from '@figwright/shared';
+
 export const PANEL_CONTROL_TAG = '@figwright/panel';
 
 /**
@@ -85,7 +87,43 @@ export interface PanelReveal {
   nodeIds: string[];
 }
 
-export type PanelControlMessage = PanelHide | PanelResize | PanelReveal;
+/**
+ * Connection target the plugin's relay client uses. In the default loopback config the plugin and
+ * the Figwright MCP server run on the same machine, so `host` is `127.0.0.1` and `port` is
+ * `DEFAULT_PORT`, and `token` is empty. When the server is bound to a LAN interface (so the plugin
+ * can run on another machine), the UI lets the user set `host` to that machine's address, `port`
+ * accordingly, and the shared `token` the server requires — see the LAN-mode docs and `local-access.ts`.
+ */
+export interface ConnectionSettings {
+  host: string;
+  port: number;
+  token: string;
+}
+
+export const DEFAULT_CONNECTION_SETTINGS: ConnectionSettings = {
+  host: '127.0.0.1',
+  port: DEFAULT_PORT,
+  token: '',
+};
+
+/** Ask the sandbox to send back the currently-stored connection settings. */
+export interface PanelSettingsRequest {
+  tag: typeof PANEL_CONTROL_TAG;
+  kind: 'panel-settings-request';
+}
+
+/** Carry (and persist) new connection settings, or echo the stored ones back down to the UI. */
+export interface PanelSettings extends ConnectionSettings {
+  tag: typeof PANEL_CONTROL_TAG;
+  kind: 'panel-settings';
+}
+
+export type PanelControlMessage =
+  | PanelHide
+  | PanelResize
+  | PanelReveal
+  | PanelSettingsRequest
+  | PanelSettings;
 
 export const createPanelHide = (): PanelHide => ({
   tag: PANEL_CONTROL_TAG,
@@ -105,6 +143,19 @@ export const createPanelReveal = (nodeIds: readonly string[]): PanelReveal => ({
   kind: 'panel-reveal',
   // Copy: the caller's array is reactive UI state, and the message must not carry a live reference.
   nodeIds: [...nodeIds],
+});
+
+export const createPanelSettingsRequest = (): PanelSettingsRequest => ({
+  tag: PANEL_CONTROL_TAG,
+  kind: 'panel-settings-request',
+});
+
+export const createPanelSettings = (settings: ConnectionSettings): PanelSettings => ({
+  tag: PANEL_CONTROL_TAG,
+  kind: 'panel-settings',
+  host: settings.host,
+  port: settings.port,
+  token: settings.token,
 });
 
 const isFiniteNumber = (value: unknown): value is number =>
@@ -139,6 +190,15 @@ export const parsePanelControl = (raw: unknown): PanelControlMessage | null => {
       // "Nothing was asked for" and "nothing was found" deserve different responses, and only the
       // latter warrants a notice — so an empty request must never reach the sandbox at all.
       return nodeIds.length === 0 ? null : createPanelReveal(nodeIds);
+    }
+    case 'panel-settings-request': {
+      return createPanelSettingsRequest();
+    }
+    case 'panel-settings': {
+      if (typeof msg.host !== 'string') return null;
+      if (!isFiniteNumber(msg.port)) return null;
+      if (typeof msg.token !== 'string') return null;
+      return createPanelSettings({ host: msg.host, port: msg.port, token: msg.token });
     }
     default: {
       return null;

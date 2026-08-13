@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { type App, createApp, h, nextTick } from 'vue';
+import { type App, createApp, h, nextTick, ref } from 'vue';
 
 // @vitest-environment happy-dom
 import { createPluginContextEvent, type PluginContextEvent } from '../../protocol/bridge.js';
+import { DEFAULT_CONNECTION_SETTINGS } from '../../protocol/panel-control.js';
 import type { ActivityEntry, RelayClientState } from '../../ui/relay/state.js';
 
 /**
@@ -111,7 +112,8 @@ const withSession = (): ReturnType<typeof useRelaySession> => {
   let session!: ReturnType<typeof useRelaySession>;
   const app = createApp({
     setup() {
-      session = useRelaySession('1.2.3');
+      // Default loopback settings; individual tests can supply their own ref if they need to.
+      session = useRelaySession('1.2.3', ref({ ...DEFAULT_CONNECTION_SETTINGS }));
       return () => h('div');
     },
   });

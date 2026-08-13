@@ -1,13 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { DEFAULT_PORT } from '@figwright/shared';
 import {
   createPanelHide,
   createPanelResize,
   createPanelReveal,
+  createPanelSettings,
+  createPanelSettingsRequest,
   PANEL_DEFAULT_SIZE,
   PANEL_MIN_SIZE,
 } from '../protocol/panel-control.js';
-import { createPanelController, STORED_SIZE_KEY } from '../src/panel.js';
+import {
+  createPanelController,
+  STORED_SETTINGS_KEY,
+  STORED_SIZE_KEY,
+} from '../src/panel.js';
 
 interface FakeNode {
   id: string;
@@ -35,6 +42,7 @@ const fakeFigma = (opts: { stored?: unknown; nodes?: FakeNode[]; mode?: string }
       resize: vi.fn<(w: number, h: number) => void>(),
       hide: vi.fn<() => void>(),
       show: vi.fn<() => void>(),
+      postMessage: vi.fn<(message: unknown) => void>(),
     },
     clientStorage: {
       getAsync: vi.fn<(key: string) => Promise<unknown>>(async key =>
@@ -237,6 +245,81 @@ describe('createPanelController', () => {
       await settle();
 
       expect(f.notify).toHaveBeenCalledWith(expect.stringContaining('no longer in this file'));
+    });
+  });
+
+  describe('connection settings', () => {
+    // The iframe can't reach figma.clientStorage, so the sandbox pushes the configured target down
+    // on open and on request, and persists (then echoes) anything the UI saves.
+    const settingsMessage = (
+      f: Fake,
+    ): { kind: string; host: string; port: number; token: string } | undefined => {
+      const calls = (f.ui.postMessage as ReturnType<typeof vi.fn>).mock.calls;
+      for (const [message] of calls) {
+        if (
+          typeof message === 'object' &&
+          message !== null &&
+          (message as { kind?: string }).kind === 'panel-settings'
+        ) {
+          return message as { kind: string; host: string; port: number; token: string };
+        }
+      }
+      return undefined;
+    };
+
+    it('pushes default settings to the UI on open', async () => {
+      const f = fakeFigma();
+
+      controllerFor(f).open('<html></html>');
+      await settle();
+
+      const msg = settingsMessage(f);
+      expect(msg?.host).toBe('127.0.0.1');
+      expect(msg?.port).toBe(DEFAULT_PORT);
+      expect(msg?.token).toBe('');
+    });
+
+    it('pushes stored settings to the UI on open', async () => {
+      const f = fakeFigma();
+      f.clientStorage.setAsync(STORED_SETTINGS_KEY, {
+        host: '192.168.1.10',
+        port: DEFAULT_PORT,
+        token: 'abc123',
+      });
+
+      controllerFor(f).open('<html></html>');
+      await settle();
+
+      const msg = settingsMessage(f);
+      expect(msg?.host).toBe('192.168.1.10');
+      expect(msg?.token).toBe('abc123');
+    });
+
+    it('responds to a settings request with the stored settings', async () => {
+      const f = fakeFigma();
+
+      controllerFor(f).apply(createPanelSettingsRequest());
+      await settle();
+
+      const msg = settingsMessage(f);
+      expect(msg?.host).toBe('127.0.0.1');
+    });
+
+    it('persists and echoes newly-saved settings', async () => {
+      const f = fakeFigma();
+      const panel = controllerFor(f);
+
+      panel.apply(createPanelSettings({ host: '10.0.0.5', port: DEFAULT_PORT, token: 'secret' }));
+      await settle();
+
+      expect(f.clientStorage.setAsync).toHaveBeenCalledWith(STORED_SETTINGS_KEY, {
+        host: '10.0.0.5',
+        port: DEFAULT_PORT,
+        token: 'secret',
+      });
+      const msg = settingsMessage(f);
+      expect(msg?.host).toBe('10.0.0.5');
+      expect(msg?.token).toBe('secret');
     });
   });
 });

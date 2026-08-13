@@ -10,12 +10,16 @@ import PanelTabs from './components/PanelTabs.vue';
 import TabActivity from './components/TabActivity.vue';
 import TabContext from './components/TabContext.vue';
 import TabDebug from './components/TabDebug.vue';
+import TabSettings from './components/TabSettings.vue';
 import { useRelaySession } from './composables/useRelaySession.js';
+import { useConnectionSettings } from './composables/useConnectionSettings.js';
 import type { Tab } from './lib/tabs.js';
 
 const appVersion = __APP_VERSION__;
 
-const { state, context, busy, sessionId, buildDiagnostics } = useRelaySession(appVersion);
+// Connection target (host/port/token) — edited in the Settings tab, drives the relay client.
+const { settings, save } = useConnectionSettings();
+const { state, context, busy, sessionId, buildDiagnostics } = useRelaySession(appVersion, settings);
 
 const tab = ref<Tab>('activity');
 
@@ -55,6 +59,7 @@ const embedded = computed(() => context.value !== null && isEmbeddedInPanel(cont
         <PanelStatus
           class="min-w-0 flex-1"
           :status="state.status"
+          :host="settings.host"
           :port="state.port"
           :connected-at="state.connectedAt"
         />
@@ -97,6 +102,7 @@ const embedded = computed(() => context.value !== null && isEmbeddedInPanel(cont
             :connected="state.status === 'connected'"
           />
           <TabContext v-else-if="tab === 'context'" :context="context" />
+          <TabSettings v-else-if="tab === 'settings'" :settings="settings" :save="save" />
           <TabDebug
             v-else
             :state="state"

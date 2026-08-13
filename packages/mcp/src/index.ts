@@ -1,7 +1,11 @@
+import { randomBytes } from 'node:crypto';
+
 import { DEFAULT_PORT, type GetScreenshotResult, newId, PROTOCOL_VERSION } from '@figwright/shared';
 import { McpServer } from '@modelcontextprotocol/server';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { serveStdio, StdioServerTransport } from '@modelcontextprotocol/server/stdio';
+
+import { localInterfaceHosts } from './local-access.js';
 
 import pkg from '../package.json' with { type: 'json' };
 import { BUILD_ID } from './build-id.js';
@@ -45,8 +49,32 @@ const log = (msg: string): void => {
 const envPort = Number(process.env.FIGWRIGHT_PORT);
 const PORT = Number.isInteger(envPort) && envPort > 0 && envPort < 65_536 ? envPort : DEFAULT_PORT;
 
-const node = new Node({ serverVersion: SERVER_VERSION, port: PORT, log });
-const follower = new Follower({ leaderUrl: node.leaderUrl, log });
+// FIGWRIGHT_HOST controls which network interface the relay binds. Default 127.0.0.1 preserves the
+// loopback-only security boundary (see local-access.ts). A non-loopback host — `0.0.0.0` or a
+// specific LAN address — lets the Figma plugin on another machine connect. That removes the
+// loopback boundary, so FIGWRIGHT_TOKEN becomes mandatory; if the operator didn't pin one we
+// generate a random secret rather than expose an unauthenticated relay on the network.
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
+const HOST = process.env.FIGWRIGHT_HOST ?? '127.0.0.1';
+const LAN_MODE = !LOOPBACK_HOSTS.has(HOST);
+
+let TOKEN: string | undefined;
+if (LAN_MODE) {
+  const provided = process.env.FIGWRIGHT_TOKEN;
+  if (provided !== undefined && provided !== '') {
+    TOKEN = provided;
+    log(`[figwright] LAN mode (host ${HOST}) — using FIGWRIGHT_TOKEN from environment`);
+  } else {
+    TOKEN = randomBytes(24).toString('base64url');
+    log(
+      `[figwright] LAN mode (host ${HOST}) — auto-generated token: ${TOKEN} ` +
+        `(set FIGWRIGHT_TOKEN to pin it across restarts)`,
+    );
+  }
+}
+
+const node = new Node({ serverVersion: SERVER_VERSION, port: PORT, host: HOST, token: TOKEN, log });
+const follower = new Follower({ leaderUrl: node.leaderUrl, token: TOKEN, log });
 const election = new Election({ node, follower, buildId: BUILD_ID, log });
 
 let currentDetach: (() => void) | null = null;
@@ -62,6 +90,10 @@ node.onRoleChange(role => {
         relay: res.relay,
         serverVersion: SERVER_VERSION,
         buildId: BUILD_ID,
+        // In LAN mode the socket is network-reachable; relax the Host gate to the bound interface
+        // and arm token auth on the mutating POST endpoints (the follower carries the same token).
+        bindHost: HOST,
+        token: TOKEN,
         // Newest build wins: a follower on a newer build asks us to step down; the port frees for
         // it within ms and the plugin reconnects to the new leader on its next retry (~250ms).
         onAbdicate: () => election.yieldLeadership(),
@@ -105,6 +137,8 @@ const SPECIAL_HANDLERS: Record<string, ToolHandler> = {
             follower,
             serverVersion: SERVER_VERSION,
             buildId: BUILD_ID,
+            bindHost: HOST,
+            token: TOKEN,
             log,
           }),
         ),
@@ -247,6 +281,18 @@ const roleDetail = node.isLeader()
 log(
   `[figwright] server ${SERVER_VERSION} (protocol ${PROTOCOL_VERSION}) ready as ${node.role}, ${roleDetail}`,
 );
+
+// Surface the exact connection target(s) the plugin must use. In LAN mode the plugin lives on
+// another machine, so print every reachable interface address plus the shared token it must enter.
+if (LAN_MODE && TOKEN !== undefined) {
+  const hosts = HOST === '0.0.0.0' || HOST === '::' ? [...localInterfaceHosts()] : [HOST];
+  if (hosts.length === 0) {
+    log(`[figwright] LAN mode: could not enumerate a LAN interface — connect via ${HOST}`);
+  }
+  for (const h of hosts) {
+    log(`[figwright] plugin → ws://${h}:${PORT}  (token: ${TOKEN})`);
+  }
+}
 
 const shutdown = async (): Promise<void> => {
   // serveStdio owns the transport it started, so it has to be the one to close it — closing the

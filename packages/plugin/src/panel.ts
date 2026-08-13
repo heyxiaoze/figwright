@@ -11,6 +11,9 @@
 import { isEmbeddedInPanel } from '../protocol/editor-context.js';
 import {
   clampPanelSize,
+  DEFAULT_CONNECTION_SETTINGS,
+  type ConnectionSettings,
+  createPanelSettings,
   PANEL_DEFAULT_SIZE,
   type PanelControlMessage,
   type PanelSize,
@@ -19,6 +22,9 @@ import { revealNodes } from './reveal.js';
 
 /** `clientStorage` key holding the last size the user dragged the window to. */
 export const STORED_SIZE_KEY = 'ui-size';
+
+/** `clientStorage` key holding the connection settings (host/port/token) for LAN mode. */
+export const STORED_SETTINGS_KEY = 'connection-settings';
 
 export interface PanelController {
   /** Show the panel at the default size, then snap to the stored one once it loads. */
@@ -56,9 +62,40 @@ export const createPanelController = (figmaCtx: typeof figma): PanelController =
     if (revealed === 0) figmaCtx.notify('Figwright: those nodes are no longer in this file');
   };
 
+  const readStoredSettings = async (): Promise<ConnectionSettings> => {
+    try {
+      const saved: unknown = await figmaCtx.clientStorage.getAsync(STORED_SETTINGS_KEY);
+      if (typeof saved !== 'object' || saved === null) return DEFAULT_CONNECTION_SETTINGS;
+      const { host, port, token } = saved as {
+        host?: unknown;
+        port?: unknown;
+        token?: unknown;
+      };
+      if (typeof host !== 'string' || typeof port !== 'number' || typeof token !== 'string') {
+        return DEFAULT_CONNECTION_SETTINGS;
+      }
+      return { host, port, token };
+    } catch {
+      return DEFAULT_CONNECTION_SETTINGS;
+    }
+  };
+
+  // Push settings down to the iframe — the UI has no direct access to figma.clientStorage, so this
+  // is how it learns the configured connection target (both on open and in reply to a request).
+  const postStoredSettings = async (): Promise<void> => {
+    const settings = await readStoredSettings();
+    // figma.ui.postMessage is the Figma plugin API — there is no targetOrigin parameter
+    // eslint-disable-next-line unicorn/require-post-message-target-origin
+    figmaCtx.ui.postMessage(createPanelSettings(settings));
+  };
+
   return {
     open: html => {
       figmaCtx.showUI(html, { ...PANEL_DEFAULT_SIZE, themeColors: true });
+      // The UI needs its stored connection settings before it can build the relay client; post
+      // them immediately (Figma buffers until the iframe script runs). The UI also sends a
+      // panel-settings-request on mount as a fallback, so a missed push is self-healing.
+      void postStoredSettings();
       // In Dev Mode's Inspect panel the UI is an iframe Figma sizes, so neither mechanism below has
       // anything to act on. Verified live there: `figma.ui.resize` moves nothing, and the `run`
       // listener cannot undo a `hide()` — hiding empties the panel for good, so the control it
@@ -92,6 +129,23 @@ export const createPanelController = (figmaCtx: typeof figma): PanelController =
         }
         case 'panel-reveal': {
           void reveal(message.nodeIds);
+          return;
+        }
+        case 'panel-settings-request': {
+          void postStoredSettings();
+          return;
+        }
+        case 'panel-settings': {
+          const settings: ConnectionSettings = {
+            host: message.host,
+            port: message.port,
+            token: message.token,
+          };
+          figmaCtx.clientStorage.setAsync(STORED_SETTINGS_KEY, settings).catch(() => {});
+          // Echo back so the UI (and any other live tab) reflects the saved value.
+          // figma.ui.postMessage is the Figma plugin API — there is no targetOrigin parameter
+          // eslint-disable-next-line unicorn/require-post-message-target-origin
+          figmaCtx.ui.postMessage(createPanelSettings(settings));
           return;
         }
       }

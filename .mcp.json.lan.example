@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "figwright": {
+      "command": "npx",
+      "args": ["-y", "@figwright/mcp"],
+      "env": {
+        "FIGWRIGHT_HOST": "0.0.0.0",
+        "FIGWRIGHT_TOKEN": "replace-with-a-long-random-string"
+      }
+    }
+  }
+}

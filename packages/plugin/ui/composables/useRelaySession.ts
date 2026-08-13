@@ -1,7 +1,8 @@
-import { DEFAULT_PORT, PROTOCOL_VERSION } from '@figwright/shared';
+import { PROTOCOL_VERSION } from '@figwright/shared';
 import { tryOnScopeDispose, useDocumentVisibility } from '@vueuse/core';
 import { computed, type ComputedRef, onMounted, type Ref, ref, watch } from 'vue';
 
+import type { ConnectionSettings } from '../../protocol/panel-control.js';
 import { type PluginContextEvent } from '../../protocol/bridge.js';
 import { RelayClient } from '../relay/client.js';
 import { buildDiagnosticBundle } from '../relay/diagnostics.js';
@@ -16,7 +17,8 @@ export interface RelaySession {
   context: Ref<PluginContextEvent | null>;
   /** True while at least one tool call is in flight. */
   busy: ComputedRef<boolean>;
-  sessionId: string;
+  /** This session's id; updates when the client is rebuilt after a settings change. */
+  sessionId: Ref<string>;
   /** Serialized bundle (versions + context + calls) for pasting into a bug report. */
   buildDiagnostics: () => string;
 }
@@ -27,21 +29,70 @@ export interface RelaySession {
  *
  * That routing behaviour is the reason this lives in one composable rather than being spread across
  * components — the invariants below are subtle and were arrived at empirically.
+ *
+ * `settings` (host/port/token) is reactive so a save in the Settings tab — or a settings push from
+ * the sandbox — rebuilds the client against the new target. The default loopback target connects on
+ * mount; only a *change* reconnects, so an identical echo from the sandbox doesn't churn the socket.
  */
-export const useRelaySession = (appVersion: string): RelaySession => {
-  const client = new RelayClient({
-    // The relay leader always binds DEFAULT_PORT — the server never hops to a fallback — so we probe
-    // exactly that one port. Scanning a range would only risk stalling on unrelated local services.
-    ports: [DEFAULT_PORT],
-    clientVersion: appVersion,
-    log: msg => console.log(msg),
-  });
+export const useRelaySession = (
+  appVersion: string,
+  settings: Ref<ConnectionSettings>,
+): RelaySession => {
   const bridge = createToolBridge({ log: msg => console.log(msg) });
-  client.setToolHandler(bridge.handler);
 
+  const buildClient = (s: ConnectionSettings): RelayClient => {
+    const client = new RelayClient({
+      // The relay leader always binds one fixed port; in LAN mode that port is whatever the user
+      // configured. Scanning a range would only risk stalling on unrelated local services.
+      ports: [s.port],
+      clientVersion: appVersion,
+      host: s.host,
+      // Empty token (the loopback default) → undefined, so the client opens a plain socket with no
+      // subprotocol — matching a relay that isn't checking. A non-empty token is offered as the
+      // WebSocket subprotocol and echoed in $hello.
+      token: s.token === '' ? undefined : s.token,
+      log: msg => console.log(msg),
+    });
+    client.setToolHandler(bridge.handler);
+    return client;
+  };
+
+  let client = buildClient(settings.value);
   const state = ref<RelayClientState>(client.getState());
   const context = ref<PluginContextEvent | null>(null);
+  const sessionId = ref<string>(client.sessionId);
   const visibility = useDocumentVisibility();
+
+  let stopSubscribe = client.subscribe(s => {
+    state.value = s;
+  });
+
+  // Rebuild the client against a new target. Disconnect the old socket first so two plugin sessions
+  // don't briefly race for routing on the leader; the session id changes, so surface the new one.
+  const rebuild = async (s: ConnectionSettings): Promise<void> => {
+    const prev = client;
+    stopSubscribe();
+    await prev.disconnect().catch(() => {});
+    client = buildClient(s);
+    stopSubscribe = client.subscribe(st => {
+      state.value = st;
+    });
+    sessionId.value = client.sessionId;
+    await client.connect().catch(err => console.warn('[relay-client] reconnect failed:', err));
+  };
+
+  // Track the last target we actually connected with, so an identical settings push (e.g. the
+  // sandbox echoing back the stored loopback defaults) doesn't tear down and rebuild the socket.
+  let lastHost = settings.value.host;
+  let lastPort = settings.value.port;
+  let lastToken = settings.value.token;
+  watch(settings, s => {
+    if (s.host === lastHost && s.port === lastPort && s.token === lastToken) return;
+    lastHost = s.host;
+    lastPort = s.port;
+    lastToken = s.token;
+    void rebuild(s);
+  });
 
   // Re-assert this session's activity from the latest known context. The leader routes to the
   // most-recently-active session, so emitting bumps this plugin to the front. No-op until the sandbox
@@ -88,9 +139,6 @@ export const useRelaySession = (appVersion: string): RelaySession => {
 
   // Mirror the relay client's state into a ref — subscribe synchronously so the panel reflects the
   // initial state, then tear everything down when the component's reactive scope is disposed.
-  const stopSubscribe = client.subscribe(s => {
-    state.value = s;
-  });
   tryOnScopeDispose(() => {
     stopSubscribe();
     stopContext();
@@ -108,7 +156,7 @@ export const useRelaySession = (appVersion: string): RelaySession => {
     // Derived here rather than in the panel: "the agent is working" is a fact about the session, and
     // more than one piece of chrome reads it.
     busy: computed(() => state.value.activity.some(e => e.status === 'pending')),
-    sessionId: client.sessionId,
+    sessionId,
     buildDiagnostics: () =>
       buildDiagnosticBundle(state.value, context.value, {
         pluginVersion: appVersion,

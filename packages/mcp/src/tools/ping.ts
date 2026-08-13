@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { dispatchTool } from '../dispatch.js';
 import type { Follower } from '../election/follower.js';
+import { localInterfaceHosts } from '../local-access.js';
 import { type Node, NodeRole } from '../election/node.js';
 import type { ToolSpec } from './spec.js';
 
@@ -51,6 +52,22 @@ export interface PingServerInfo {
    * it).
    */
   portConflict?: string;
+  /**
+   * LAN mode only (server bound to a non-loopback host). The host the relay actually listens on, so
+   * a plugin on another machine knows the address to connect to. Absent on the default loopback bind.
+   */
+  bindHost?: string;
+  /**
+   * LAN mode only: the `ws://host:port` target(s) a cross-machine plugin must use. When the host is
+   * `0.0.0.0` every reachable interface address is listed. Absent on the default loopback bind.
+   */
+  lanUrl?: string;
+  /**
+   * LAN mode only: the shared token the plugin must supply. Surfaced here (not a secret at rest on
+   * the user's own machine) so the agent can hand it to the user to paste into the plugin's Settings
+   * tab. Absent on the default loopback bind, where no token is used.
+   */
+  token?: string;
 }
 
 /**
@@ -96,16 +113,38 @@ export interface PingContext {
   serverVersion: string;
   /** This process's build stamp (see build-id.ts); defaults to 0 (unbundled). */
   buildId?: number;
+  /** LAN-mode bind host (FIGWRIGHT_HOST). Lets the ping result advertise the cross-machine target. */
+  bindHost?: string;
+  /** LAN-mode shared token (FIGWRIGHT_TOKEN). Surfaced so the agent can relay it to the user. */
+  token?: string | undefined;
   log?: (msg: string) => void;
 }
 
-const serverInfo = (ctx: PingContext): PingServerInfo => ({
-  version: ctx.serverVersion,
-  role: ctx.node.role,
-  port: ctx.node.isLeader() ? (ctx.node.getLeader()?.port ?? null) : null,
-  ts: Date.now(),
-  buildId: ctx.buildId ?? 0,
-});
+const isLoopbackHost = (host: string): boolean =>
+  host === '127.0.0.1' || host === 'localhost' || host === '::1' || host === '[::1]';
+
+const serverInfo = (ctx: PingContext): PingServerInfo => {
+  const info: PingServerInfo = {
+    version: ctx.serverVersion,
+    role: ctx.node.role,
+    port: ctx.node.isLeader() ? (ctx.node.getLeader()?.port ?? null) : null,
+    ts: Date.now(),
+    buildId: ctx.buildId ?? 0,
+  };
+  // LAN mode: advertise the connection target(s) and token so a plugin on another machine — and the
+  // human configuring it — can reach us. Loopback mode keeps these absent (no token, single host).
+  if (ctx.bindHost !== undefined && !isLoopbackHost(ctx.bindHost)) {
+    const port = info.port ?? ctx.node.port;
+    const hosts =
+      ctx.bindHost === '0.0.0.0' || ctx.bindHost === '::'
+        ? [...localInterfaceHosts()]
+        : [ctx.bindHost];
+    info.bindHost = ctx.bindHost;
+    info.lanUrl = hosts.map(h => `ws://${h}:${port}`).join(', ');
+    if (ctx.token !== undefined) info.token = ctx.token;
+  }
+  return info;
+};
 
 export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
   const server = serverInfo(ctx);

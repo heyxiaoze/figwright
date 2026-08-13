@@ -14,7 +14,13 @@ import {
   type PluginBridgeMessage,
   type PluginContextEvent,
 } from '../../protocol/bridge.js';
-import type { PanelControlMessage } from '../../protocol/panel-control.js';
+import {
+  type ConnectionSettings,
+  createPanelSettings,
+  createPanelSettingsRequest,
+  parsePanelControl,
+  type PanelControlMessage,
+} from '../../protocol/panel-control.js';
 
 /** Everything the panel is allowed to send up to the sandbox. */
 export type SandboxOutbound = PluginBridgeMessage | PanelControlMessage;
@@ -64,3 +70,28 @@ export const onSandboxContext = (listener: (event: PluginContextEvent) => void):
   onSandboxMessage(message => {
     if (isPluginContextEvent(message)) listener(message);
   });
+
+/**
+ * Subscribe to connection-settings pushes from the sandbox. The sandbox owns `figma.clientStorage`
+ * (the iframe cannot reach it), so it is the source of truth for host/port/token and sends them
+ * down both on open and in reply to `requestConnectionSettings`. Returns an unsubscribe.
+ */
+export const onSandboxSettings = (
+  listener: (settings: ConnectionSettings) => void,
+): (() => void) =>
+  onSandboxMessage(message => {
+    const parsed = parsePanelControl(message);
+    if (parsed !== null && parsed.kind === 'panel-settings') {
+      listener({ host: parsed.host, port: parsed.port, token: parsed.token });
+    }
+  });
+
+/** Ask the sandbox for the stored connection settings. */
+export const requestConnectionSettings = (): void => {
+  postToSandbox(createPanelSettingsRequest());
+};
+
+/** Persist (and apply) new connection settings. */
+export const saveConnectionSettings = (settings: ConnectionSettings): void => {
+  postToSandbox(createPanelSettings(settings));
+};

@@ -7,9 +7,10 @@ import type { RelayStatus } from '../../ui/relay/state.js';
 
 const mountStatus = (props: {
   status: RelayStatus;
+  host?: string;
   port?: number | null;
   connectedAt?: number | null;
-}) => mount(PanelStatus, { props: { port: null, connectedAt: null, ...props } });
+}) => mount(PanelStatus, { props: { host: '127.0.0.1', port: null, connectedAt: null, ...props } });
 
 /** The pulsing ring is the absolutely-positioned span inside the dot. */
 const hasPingRing = (wrapper: ReturnType<typeof mountStatus>): boolean =>
@@ -69,7 +70,9 @@ describe('PanelStatus', () => {
     it('omits the port when the client has none', () => {
       const wrapper = mountStatus({ status: 'connected', port: null, connectedAt: null });
 
-      expect(wrapper.text()).not.toContain(':');
+      // Host still shows (ws://127.0.0.1); only the :port suffix must be absent.
+      expect(wrapper.text()).toContain('ws://127.0.0.1');
+      expect(wrapper.text()).not.toContain(':3055');
     });
 
     // Port and uptime describe a live connection; showing them while reconnecting would be a lie.

@@ -33,6 +33,18 @@ export interface LeaderEndpointDeps {
   rpcTimeoutMs?: number;
   /** Test override for ABDICATE_QUIET_WINDOW_MS. */
   abdicateQuietWindowMs?: number;
+  /**
+   * Host the relay socket is bound to. When non-loopback (LAN mode) the loopback-only Host gate must
+   * relax to admit the LAN interface address — passed through to isAllowedHost.
+   */
+  bindHost?: string;
+  /**
+   * LAN-mode shared secret. When set, the mutating POST endpoints (/rpc, /abdicate) require it as
+   * the `x-figwright-token` header — a LAN-bound socket is network-reachable, and those endpoints
+   * dispatch to / step down the leader, so an unauthenticated stranger must not reach them. The
+   * follower carries the same token; /ping stays open because it is read-only health info.
+   */
+  token?: string | undefined;
 }
 
 const readBody = (req: IncomingMessage): Promise<Buffer> =>
@@ -66,10 +78,34 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
   const { relay, serverVersion } = deps;
   const log = deps.log ?? ((): void => {});
 
+  // In LAN mode the POST endpoints are network-reachable, so they require the shared token as the
+  // `x-figwright-token` header. The co-located follower carries it; an unauthenticated peer may not
+  // dispatch to the plugin or force a leadership handoff. Read-only /ping stays open on purpose.
+  const tokenOk = (req: IncomingMessage): boolean => {
+    if (deps.token === undefined) return true;
+    return req.headers['x-figwright-token'] === deps.token;
+  };
+  const refuseUnauthorized = (req: IncomingMessage, res: ServerResponse): boolean => {
+    if (tokenOk(req)) return false;
+    log(`[leader] refused ${req.method ?? '?'} ${req.url ?? '?'} — missing/incorrect LAN token`);
+    if (req.url === RPC_PATH) {
+      writeMsgpack(res, 403, {
+        kind: 'err',
+        requestId: '',
+        code: ErrorCode.InvalidParams,
+        message: 'LAN token required',
+      });
+    } else {
+      writeJson(res, 403, { error: 'forbidden — LAN token required' });
+    }
+    return true;
+  };
+
   const handler = (req: IncomingMessage, res: ServerResponse): void => {
     // Addressed by a name that isn't ours: DNS rebinding, where the browser thinks it is talking to
-    // the attacker's domain and so both omits Origin and gets to read the reply.
-    if (!isAllowedHost(req.headers.host)) {
+    // the attacker's domain and so both omits Origin and gets to read the reply. In LAN mode
+    // (bindHost set) this relaxes to admit the bound LAN interface address.
+    if (!isAllowedHost(req.headers.host, deps.bindHost)) {
       log(
         `[leader] refused ${req.method ?? '?'} ${req.url ?? '?'} for host ${req.headers.host ?? ''}`,
       );
@@ -103,6 +139,7 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
     }
 
     if (req.method === 'POST' && req.url === ABDICATE_PATH) {
+      if (refuseUnauthorized(req, res)) return;
       if (!hasContentType(req.headers['content-type'], 'application/json')) {
         writeJson(res, 415, { ok: false, reason: 'unsupported media type' });
         return;
@@ -157,6 +194,7 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
     }
 
     if (req.method === 'POST' && req.url === RPC_PATH) {
+      if (refuseUnauthorized(req, res)) return;
       // A media type outside the CORS simple-request set, so a cross-origin POST has to preflight —
       // and the preflight fails, because we answer no CORS headers.
       if (!hasContentType(req.headers['content-type'], 'application/msgpack')) {

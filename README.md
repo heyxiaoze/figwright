@@ -206,6 +206,61 @@ Loopback is not on its own a boundary — a web page you visit can still reach a
 
 **Figwright is not a substitute for reviewing what your agent does.** Its write tools change your Figma file and its export tools write files to paths the agent chooses; an agent acting on a malicious design or a prompt-injected instruction can misuse both. Your MCP client's tool-approval controls are the boundary that matters.
 
+## LAN mode (connect across machines)
+
+By default the relay listens on `127.0.0.1` — loopback only — so the plugin must run on the **same machine** as your MCP client. LAN mode binds the relay to a network interface instead, so a plugin on **another machine on the same network** (or the same machine reached via its LAN address) can connect to it.
+
+### Configure the server
+
+The server reads three environment variables. `FIGWRIGHT_PORT` already exists; the two new ones gate LAN mode:
+
+| Variable | Default | Meaning |
+| :--- | :--- | :--- |
+| `FIGWRIGHT_HOST` | `127.0.0.1` | The host the relay binds. Use a LAN IP (e.g. `192.168.1.42`) or `0.0.0.0` to listen on every interface. **Any non-loopback value turns on LAN mode.** |
+| `FIGWRIGHT_TOKEN` | *(auto)* | The shared secret a connecting plugin must present. In LAN mode, if you leave this unset the server generates a random 24-byte token at startup and prints it in the logs. Set it to a stable value so the plugin config survives restarts. |
+| `FIGWRIGHT_PORT` | `3055` | The relay port. |
+
+Example `.mcp.json` (a ready-to-use copy lives at [`.mcp.json.lan.example`](./.mcp.json.lan.example)):
+
+```json
+{
+  "mcpServers": {
+    "figwright": {
+      "command": "npx",
+      "args": ["-y", "@figwright/mcp"],
+      "env": {
+        "FIGWRIGHT_HOST": "0.0.0.0",
+        "FIGWRIGHT_TOKEN": "replace-with-a-long-random-string"
+      }
+    }
+  }
+}
+```
+
+With `0.0.0.0` the relay listens on every interface; `ping` then reports a `lanUrl` listing each reachable `ws://<ip>:<port>` target. Binding to a concrete LAN IP is slightly tighter.
+
+### Connect the plugin
+
+Open the plugin in Figma on the other machine and switch to the new **Settings** tab. Enter:
+
+- **Host** — the server machine's LAN IP (or one of `0.0.0.0`'s reported interface addresses).
+- **Port** — `FIGWRIGHT_PORT` (default `3055`).
+- **Token** — the `FIGWRIGHT_TOKEN` you set (or the auto-generated one from the server logs).
+
+Save, and the plugin reconnects to the remote relay. The Settings tab validates that a token is present whenever the host isn't loopback, and **Reset to loopback** returns to the default `127.0.0.1:3055` with no token.
+
+You can also ask your agent to run `ping`: in LAN mode its result includes `lanUrl` and `token`, so the agent can hand you the exact `ws://…` target and token to paste into the plugin.
+
+### Security model in LAN mode
+
+Opening the relay to the network **removes the loopback boundary** that the default deployment relies on, so LAN mode is *not* the same as the safe local-only setup. To compensate:
+
+- **Token auth is mandatory.** Every WebSocket upgrade must present the token as a WebSocket subprotocol *and* in the `$hello` handshake, and every mutating HTTP POST (`/rpc`, `/abdicate`) must carry an `x-figwright-token` header. Requests without a valid token are refused (403). On loopback, no token is used.
+- **The `Host` gate stays on**, just widened. The relay still validates the `Host` header — it now admits LAN addresses in addition to loopback, and rejects anything that names a foreign host — preserving the DNS-rebinding defense. Read-only `/ping` remains publicly reachable so you can discover the server, but it never reveals more than connection info.
+- **Link-local and internal-only addresses are filtered** from the advertised `lanUrl` so you don't accidentally hand out an unreachable target.
+
+Treat the token like a password: anyone who learns it (and can reach the port) can drive your Figma plugin. Keep LAN mode behind a trusted network, pin `FIGWRIGHT_TOKEN`, and don't expose the port past your firewall. If you only need the plugin on the same machine, stay on the default loopback bind — no token, no network surface at all.
+
 ## FAQ
 
 <details>

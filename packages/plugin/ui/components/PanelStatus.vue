@@ -7,6 +7,8 @@ import type { RelayStatus } from '../relay/state.js';
 
 const props = defineProps<{
   status: RelayStatus;
+  /** Host the relay is targeting (127.0.0.1 on loopback, a LAN address in LAN mode). */
+  host: string;
   port: number | null;
   connectedAt: number | null;
 }>();
@@ -35,12 +37,13 @@ const settling = computed(() => props.status === 'connecting' || props.status ==
 
 const meta = computed(() => {
   if (props.status !== 'connected') return '';
+  const host = props.host || '127.0.0.1';
   const port = props.port === null ? '' : `:${props.port}`;
   const up =
     props.connectedAt === null
       ? ''
       : ` · up ${formatRelativeTime(props.connectedAt, now.value.getTime())}`;
-  return `${port}${up}`;
+  return `ws://${host}${port}${up}`;
 });
 </script>
 

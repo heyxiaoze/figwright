@@ -37,6 +37,12 @@ export interface FollowerOptions {
   pingTimeoutMs?: number;
   fetch?: FetchFn;
   log?: (msg: string) => void;
+  /**
+   * LAN-mode shared secret. When the leader binds a non-loopback host and arms token auth on its
+   * POST endpoints, the follower must carry this as the `x-figwright-token` header or its /rpc and
+   * /abdicate calls get refused. Set it alongside the leader (same FIGWRIGHT_TOKEN env).
+   */
+  token?: string | undefined;
 }
 
 export class Follower {
@@ -49,7 +55,14 @@ export class Follower {
       pingTimeoutMs: opts.pingTimeoutMs ?? DEFAULT_PING_TIMEOUT_MS,
       fetch: opts.fetch ?? globalThis.fetch.bind(globalThis),
       log: opts.log ?? ((): void => {}),
+      token: opts.token,
     };
+  }
+
+  /** Extra headers for authenticated POSTs in LAN mode; empty when no token is configured. Computed
+   * lazily against this.opts so it can't be read before the constructor assigns opts above. */
+  private get authHeaders(): Record<string, string> {
+    return this.opts.token === undefined ? {} : { 'x-figwright-token': this.opts.token };
   }
 
   get leaderUrl(): string {
@@ -109,7 +122,7 @@ export class Follower {
     try {
       const res = await this.opts.fetch(`${this.opts.leaderUrl}${ABDICATE_PATH}`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...this.authHeaders },
         body: JSON.stringify({ buildId }),
         signal: AbortSignal.timeout(this.opts.pingTimeoutMs),
       });
@@ -162,7 +175,7 @@ export class Follower {
     try {
       res = await this.opts.fetch(`${this.opts.leaderUrl}${RPC_PATH}`, {
         method: 'POST',
-        headers: { 'content-type': 'application/msgpack' },
+        headers: { 'content-type': 'application/msgpack', ...this.authHeaders },
         body,
         // Per-tool follower budget when given (outermost layer); else the constructor default.
         signal: AbortSignal.timeout(timeoutMs ?? this.opts.rpcTimeoutMs),

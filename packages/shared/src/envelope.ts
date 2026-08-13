@@ -62,6 +62,11 @@ export const HelloParamsSchema = z.object({
   // String, not a literal: a version-mismatched plugin must still parse so the relay can reject it
   // with a clear ProtocolMismatch message (see relay.handleHello), not a generic schema-parse failure.
   protocolVersion: z.string(),
+  // Present only in LAN mode: the shared secret the server requires of every plugin session. The
+  // loopback default carries no token (loopback *is* the boundary); once the relay binds a
+  // non-loopback host the boundary disappears, so the token replaces it. See relay.handleHello and
+  // relay.verifyClient, and local-access.ts for why the host gate alone no longer suffices.
+  token: z.string().optional(),
 });
 export type HelloParams = z.infer<typeof HelloParamsSchema>;
 
