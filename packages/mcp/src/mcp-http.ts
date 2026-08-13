@@ -99,28 +99,27 @@ export const attachMcpHttp = (server: HttpServer, deps: McpHttpDeps): (() => voi
   const log = deps.log ?? ((): void => {});
   const path = deps.path ?? MCP_PATH;
 
-  // Stateful mode (sessionIdGenerator set): the transport manages sessions by Mcp-Session-Id and
-  // rejects requests whose session it doesn't know. enableJsonResponse keeps responses as plain
-  // JSON rather than opening an SSE stream — the agent works request/response style, which is all
-  // figwright needs and the simplest thing to bridge back to Node.
-  const transport = new WebStandardStreamableHTTPServerTransport({
-    sessionIdGenerator: () => randomUUID(),
-    enableJsonResponse: true,
-  });
+  // Streamable HTTP is stateful *per session*: the SDK assigns each connection a Mcp-Session-Id and an
+  // McpServer may only be initialised once. figwright is a relay, so multiple agents (and
+  // reconnects) hit this endpoint — a single shared McpServer would reject the second `initialize`
+  // with "Server already initialized". So we spin up a fresh transport+McpServer per session and key
+  // them by the SDK-assigned session id. enableJsonResponse keeps responses as plain JSON (no SSE
+  // stream), which is all figwright needs and the simplest thing to bridge back to Node.
+  const sessions = new Map<string, WebStandardStreamableHTTPServerTransport>();
 
-  // connect() is async; gate requests on `ready` so a client that arrives mid-startup gets a clear
-  // 503 instead of a half-built server erroring mid-handshake.
-  let ready = false;
-  const mcp = deps.createServer();
-  void (async (): Promise<void> => {
-    try {
-      await mcp.connect(transport);
-      ready = true;
-      log(`[mcp-http] listening on ${path} (remote MCP enabled)`);
-    } catch (err) {
-      log(`[mcp-http] connect failed: ${(err as Error).message}`);
-    }
-  })();
+  const createSession = async (): Promise<WebStandardStreamableHTTPServerTransport> => {
+    const transport = new WebStandardStreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+      enableJsonResponse: true,
+    });
+    const mcp = deps.createServer();
+    await mcp.connect(transport);
+    transport.onclose = () => {
+      if (transport.sessionId) sessions.delete(transport.sessionId);
+    };
+    log('[mcp-http] new session');
+    return transport;
+  };
 
   const handler = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     try {
@@ -137,15 +136,27 @@ export const attachMcpHttp = (server: HttpServer, deps: McpHttpDeps): (() => voi
         writeUnauthorized(res);
         return;
       }
-      if (!ready) {
-        res.writeHead(503, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ error: 'mcp server starting' }));
-        return;
+
+      const clientIp = req.socket.remoteAddress ?? 'unknown';
+      log(`[mcp-http] ${req.method} ${reqUrl} from ${clientIp}`);
+
+      // Reuse the existing session if the client sent a known session id; otherwise open a fresh one
+      // (a brand-new initialize, or a reconnect presenting a session we no longer have).
+      const sessionId = req.headers['mcp-session-id'];
+      let transport: WebStandardStreamableHTTPServerTransport | undefined;
+      if (typeof sessionId === 'string' && sessions.has(sessionId)) {
+        transport = sessions.get(sessionId);
+      } else {
+        transport = await createSession();
       }
 
       const url = new URL(reqUrl, `http://${req.headers.host ?? 'localhost'}`);
       const webReq = toWebRequest(req, url);
       const webRes = await transport.handleRequest(webReq);
+      // The session id is assigned during initialize; remember it so later requests reuse this session.
+      if (transport.sessionId && !sessions.has(transport.sessionId)) {
+        sessions.set(transport.sessionId, transport);
+      }
       await writeWebResponse(res, webRes);
     } catch (err) {
       log(`[mcp-http] request error: ${(err as Error).message}`);
@@ -157,9 +168,12 @@ export const attachMcpHttp = (server: HttpServer, deps: McpHttpDeps): (() => voi
   };
 
   server.on('request', handler);
+  log(`[mcp-http] mounted on ${path} (remote MCP enabled)`);
   return (): void => {
     server.removeListener('request', handler);
-    void transport.close().catch(() => {});
-    void mcp.close().catch(() => {});
+    for (const transport of sessions.values()) {
+      void transport.close().catch(() => {});
+    }
+    sessions.clear();
   };
 };
