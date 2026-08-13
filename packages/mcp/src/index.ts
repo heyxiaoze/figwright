@@ -29,7 +29,7 @@ import { GET_DESIGN_CONTEXT_TOOL_NAME } from './tools/get-design-context.js';
 import { GET_SCREENSHOT_TOOL_NAME, screenshotContent } from './tools/get-screenshot.js';
 import { handleIconMap, ICON_MAP_TOOL_NAME } from './tools/icon-map.js';
 import { formatPingResult, handlePing, pingTool } from './tools/ping.js';
-import { ALL_TOOL_SPECS } from './tools/registry.js';
+import { ALL_TOOL_SPECS, filterToolSpecs, WRITE_TOOL_NAMES } from './tools/registry.js';
 import { handleSaveImageFills, SAVE_IMAGE_FILLS_TOOL_NAME } from './tools/save-image-fills.js';
 import { handleSaveScreenshots, SAVE_SCREENSHOTS_TOOL_NAME } from './tools/save-screenshots.js';
 import { handleScanComponents, SCAN_COMPONENTS_TOOL_NAME } from './tools/scan-components.js';
@@ -57,6 +57,12 @@ const PORT = Number.isInteger(envPort) && envPort > 0 && envPort < 65_536 ? envP
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
 const HOST = process.env.FIGWRIGHT_HOST ?? '127.0.0.1';
 const LAN_MODE = !LOOPBACK_HOSTS.has(HOST);
+
+// FIGWRIGHT_READONLY (optional) drops every `kind: 'write'` tool from what the server advertises,
+// so a connected agent can read the Figma file (figma-to-code) but cannot modify it (code-to-figma).
+// Orthogonal to LAN mode: it works over stdio too. Pair it with a pinned FIGWRIGHT_TOKEN when the
+// relay is on the network so the read-only agent still authenticates.
+const READONLY = /^1|true|yes|on$/i.test(process.env.FIGWRIGHT_READONLY ?? '');
 
 let TOKEN: string | undefined;
 if (LAN_MODE) {
@@ -187,7 +193,7 @@ const createMcpServer = (): McpServer => {
     { instructions: SERVER_INSTRUCTIONS },
   );
 
-  for (const spec of ALL_TOOL_SPECS) {
+  for (const spec of filterToolSpecs(ALL_TOOL_SPECS, { readonly: READONLY })) {
     const run: ToolHandler =
       SPECIAL_HANDLERS[spec.name] ??
       (async args => {
@@ -281,6 +287,15 @@ const roleDetail = node.isLeader()
 log(
   `[figwright] server ${SERVER_VERSION} (protocol ${PROTOCOL_VERSION}) ready as ${node.role}, ${roleDetail}`,
 );
+
+// Spell out the permission posture so the operator can see, at a glance, what a connected agent may
+// do. Read-only mode keeps reads + server-local codegen helpers and hides every document mutation.
+if (READONLY) {
+  log(
+    `[figwright] read-only mode — ${WRITE_TOOL_NAMES.size} write tools hidden; ` +
+      `connected agents can read the Figma file (figma-to-code) but cannot modify it (code-to-figma)`,
+  );
+}
 
 // Surface the exact connection target(s) the plugin must use. In LAN mode the plugin lives on
 // another machine, so print every reachable interface address plus the shared token it must enter.

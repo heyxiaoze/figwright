@@ -246,6 +246,32 @@ Figwright 完全运行在你的机器上：你的客户端通过 stdio 启动服
 
 使用 `0.0.0.0` 时，中继监听所有接口；此时 `ping` 会返回一个 `lanUrl`，列出每个可达的 `ws://<ip>:<port>` 目标。绑定到具体的 LAN IP 则收紧一些。
 
+### 只读模式（决定对方能读还是能写）
+
+默认情况下，连上来的智能体拥有全部工具，**既能读取设计（figma-to-code）也能写回修改（code-to-figma）**。当你把服务器开放给另一台机器（例如让一位前端同事远程读取你的 Figma 来生成代码）时，可以用 `FIGWRIGHT_READONLY` 把它限制为**只读**——服务器只会向智能体暴露读取类与代码生成辅助类工具，**所有写工具（创建 / 编辑 / 删除节点、批量编辑、Motion 写入等）一律不出现**，对方因此只能读取、无法改你的文件。
+
+| 变量 | 默认值 | 含义 |
+| :--- | :--- | :--- |
+| `FIGWRIGHT_READONLY` | `false` | 设为 `1` / `true` / `yes` / `on` 时开启只读：隐藏全部 `kind: 'write'` 工具，仅保留读取与本地辅助工具。 |
+
+```json
+{
+  "mcpServers": {
+    "figwright": {
+      "command": "node",
+      "args": ["packages/mcp/dist/index.mjs"],
+      "env": {
+        "FIGWRIGHT_HOST": "0.0.0.0",
+        "FIGWRIGHT_TOKEN": "replace-with-a-long-random-string",
+        "FIGWRIGHT_READONLY": "true"
+      }
+    }
+  }
+}
+```
+
+> 只读模式与 LAN 模式**正交**：即便走本地 stdio（不开 LAN），也能用它限制本机智能体的权限。在 LAN 下开启只读时，仍建议同时固定 `FIGWRIGHT_TOKEN`——只读不代表无需认证，对方仍要先凭令牌连上才能读到你的设计。
+
 ### 连接插件
 
 最快的方式是使用服务器启动时打印的**邀请串（invite）**：

@@ -245,3 +245,20 @@ export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
 export const WRITE_TOOL_NAMES: ReadonlySet<string> = new Set(
   ALL_TOOL_SPECS.filter(spec => spec.kind === 'write').map(spec => spec.name),
 );
+
+/**
+ * Filter the advertised tool set by permission mode. In read-only mode every `kind: 'write'` tool
+ * is dropped, leaving reads (`'read'`) and server-local helpers (`'local'`) — so a connected agent
+ * can drive figma-to-code but cannot modify the Figma file. `'local'` tools (component_map,
+ * token_map, design_diff, analyze_project …) are codegen helpers that run on the server and touch
+ * nothing in the document, so they stay visible; only genuine document mutations are hidden.
+ *
+ * Pure and side-effect free so it is trivially testable and the wire gate derives the same rule.
+ */
+export function filterToolSpecs(
+  specs: readonly ToolSpec[],
+  opts: { readonly?: boolean },
+): ToolSpec[] {
+  if (!opts.readonly) return [...specs];
+  return specs.filter(spec => spec.kind !== 'write');
+}
