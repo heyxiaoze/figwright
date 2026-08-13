@@ -8,18 +8,10 @@
 
 Where Playwright drives the browser, Figwright drives Figma.
 
-[![npm](https://img.shields.io/npm/v/@figwright/mcp?logo=npm&color=cb3837)](https://www.npmjs.com/package/@figwright/mcp)
-[![CI](https://github.com/awdr74100/figwright/actions/workflows/ci.yml/badge.svg)](https://github.com/awdr74100/figwright/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
-[![Glama MCP server](https://glama.ai/mcp/servers/awdr74100/figwright/badges/score.svg)](https://glama.ai/mcp/servers/awdr74100/figwright)
-[![Fork of awdr74100/figwright](https://img.shields.io/badge/Fork%20of-awdr74100%2Ffigwright-8a2be2?logo=github)](https://github.com/awdr74100/figwright)
+[![LAN listen mode](https://img.shields.io/badge/Feature-LAN%20listen%20mode-8a2be2)](https://github.com/heyxiaoze/figwright#lan-mode-connect-across-machines)
 
 </div>
-
-> 🍴 **A personal fork of [figwright](https://github.com/awdr74100/figwright) by [@awdr74100](https://github.com/awdr74100).**
-> This fork adds **[LAN listen mode](#lan-mode-connect-across-machines)** — connect the Figma plugin from another machine on your network. All core design and tooling credit goes to the original author; please ⭐ the [upstream repo](https://github.com/awdr74100/figwright).
-
-
 
 ## What is Figwright?
 
@@ -122,28 +114,37 @@ The window is yours to arrange. Drag the bottom-right corner to resize it — a 
 
 ## Quick start
 
-### 1. Add the server to your MCP client
+### 1. Build and run the server from this fork
 
-For Claude Code, add this to your `.mcp.json` (other clients use the same shape):
+The LAN listen mode in this fork is **not** published to npm, so build the server from source:
+
+```bash
+git clone https://github.com/heyxiaoze/figwright.git
+cd figwright
+pnpm install
+pnpm -C packages/mcp build
+```
+
+Then point your MCP client at the built server. For Claude Code, add this to your `.mcp.json` (other clients use the same shape):
 
 ```json
 {
   "mcpServers": {
     "figwright": {
-      "command": "npx",
-      "args": ["-y", "@figwright/mcp@latest"]
+      "command": "node",
+      "args": ["packages/mcp/dist/index.mjs"]
     }
   }
 }
 ```
 
-`npx` fetches and runs the published server — no global install needed.
+For LAN mode, add an `env` block with `FIGWRIGHT_HOST` and `FIGWRIGHT_TOKEN` — see [LAN mode](#lan-mode-connect-across-machines) and `.mcp.json.lan.example`.
 
 ### 2. Install the Figma plugin
 
 The plugin isn't on the Figma Community marketplace yet, so install it from the latest release:
 
-1. Download the plugin zip from the [**latest GitHub Release**](https://github.com/awdr74100/figwright/releases/latest) and unzip it.
+1. Download the plugin zip from the [**latest GitHub Release**](https://github.com/heyxiaoze/figwright/releases/latest) and unzip it.
 2. In the Figma **desktop app**: **Menu → Plugins → Development → Import plugin from manifest…** and pick the unzipped `manifest.json`.
 
 ### 3. Connect
@@ -155,7 +156,7 @@ Open the Figwright plugin in Figma (**Plugins → Development → Figwright**). 
 The [skills](#skills) make agents reach for Figwright at the right moment and follow the grounded workflows:
 
 ```bash
-npx skills add awdr74100/figwright/skills
+npx skills add heyxiaoze/figwright/skills
 ```
 
 ### 5. Try it
@@ -180,8 +181,8 @@ Agent skills orchestrate Figwright's tools. They're model-invoked — your agent
 Install across any supported agent with the [`skills`](https://www.skills.sh) CLI:
 
 ```bash
-npx skills add awdr74100/figwright/skills      # both
-npx skills add https://github.com/awdr74100/figwright/tree/main/skills/figma-codegen  # one
+npx skills add heyxiaoze/figwright/skills      # both
+npx skills add https://github.com/heyxiaoze/figwright/tree/main/skills/figma-codegen  # one
 ```
 
 > [!NOTE]
@@ -381,9 +382,7 @@ Contributions are welcome. See **[CONTRIBUTING.md](./CONTRIBUTING.md)** for how 
 
 ## Acknowledgements
 
-This project is a **personal fork** of [**figwright**](https://github.com/awdr74100/figwright) by [**@awdr74100**](https://github.com/awdr74100) (Roya). All credit for the core project — its architecture, the 112-tools bidirectional bridge, and the plugin — belongs to the original author. This fork layers a **[LAN listen mode](#lan-mode-connect-across-machines)** on top and changes nothing about how the upstream project works.
-
-If you find the underlying project useful, please ⭐ the [original repository](https://github.com/awdr74100/figwright) and support upstream development.
+Figwright began as [**figwright**](https://github.com/awdr74100/figwright) by [**@awdr74100**](https://github.com/awdr74100) (Roya), released under the MIT License. This project builds on that foundation — thank you for open-sourcing it.
 
 ## License
 
