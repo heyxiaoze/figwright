@@ -13,6 +13,7 @@ import { dispatchTool, resolveRoutingSession } from './dispatch.js';
 import { Election } from './election/election.js';
 import { Follower } from './election/follower.js';
 import { attachLeaderEndpoints } from './election/leader-endpoints.js';
+import { attachMcpHttp } from './mcp-http.js';
 import { Node, NodeRole } from './election/node.js';
 import { SERVER_INSTRUCTIONS } from './instructions.js';
 import { wireShutdown } from './lifecycle.js';
@@ -92,7 +93,9 @@ node.onRoleChange(role => {
   if (role === NodeRole.Leader) {
     const res = node.getLeader();
     if (res !== null) {
-      currentDetach = attachLeaderEndpoints(res.http, {
+      // Leader endpoints mount first so their request handler runs first; it short-circuits /mcp
+      // and lets the remote MCP handler below answer those requests without a 404.
+      const detachLeader = attachLeaderEndpoints(res.http, {
         relay: res.relay,
         serverVersion: SERVER_VERSION,
         buildId: BUILD_ID,
@@ -105,11 +108,19 @@ node.onRoleChange(role => {
         onAbdicate: () => election.yieldLeadership(),
         log,
       });
+      const detachMcp = attachMcpHttp(res.http, {
+        createServer: createMcpServer,
+        token: TOKEN,
+        bindHost: HOST,
+        log,
+      });
+      currentDetach = (): void => {
+        detachMcp();
+        detachLeader();
+      };
     }
   }
 });
-
-await election.start();
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<CallToolResult>;
 
@@ -239,6 +250,11 @@ const createMcpServer = (): McpServer => {
 
   return mcp;
 };
+
+// Start the election only after every const the role-change handler may touch is initialized — the
+// handler now builds a remote-MCP server via createMcpServer, declared just above. Starting earlier
+// would hit a temporal-dead-zone ReferenceError, because consts below are not hoisted.
+await election.start();
 
 /**
  * A stdio transport that reports its own death.

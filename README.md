@@ -272,6 +272,38 @@ Figwright 完全运行在你的机器上：你的客户端通过 stdio 启动服
 
 > 只读模式与 LAN 模式**正交**：即便走本地 stdio（不开 LAN），也能用它限制本机智能体的权限。在 LAN 下开启只读时，仍建议同时固定 `FIGWRIGHT_TOKEN`——只读不代表无需认证，对方仍要先凭令牌连上才能读到你的设计。
 
+### 远程 MCP：让对方智能体直连你的服务器
+
+除了把**插件**放到另一台机器（见「连接插件」），还有另一种跨机拓扑：把**智能体**放到另一台机器——你的 Figma 与插件仍在本机，而同事在他的 VSCode（或 Cursor / Claude Code）里通过 MCP **直接连到你的服务器**，读取（或读写）你的 Figma。这正是「你决定谁能读、谁能写」的协作场景：服务器在本机 stdio 之外，额外在 `http://<你的LAN IP>:3055/mcp` 暴露一个 Streamable HTTP 端点，对方 agent 远程连它即可。
+
+前提：服务器的 `FIGWRIGHT_HOST` 必须绑定非回环地址（你的 LAN IP 或 `0.0.0.0`）。此时 `FIGWRIGHT_TOKEN` 自动成为**必填**——对方 agent 必须在请求里携带它（与插件走的是同一把令牌）。
+
+对方在他的 MCP 客户端里这样配置（以 `http` 类型为例）：
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "figwright": {
+        "type": "http",
+        "url": "http://192.168.1.42:3055/mcp",
+        "headers": {
+          "x-figwright-token": "replace-with-a-long-random-string"
+        }
+      }
+    }
+  }
+}
+```
+
+> 令牌两种携带方式都支持：`x-figwright-token` 请求头（figwright 原生），或标准的 `Authorization: Bearer <token>`。请用你 `.mcp.json` 里那同一个 `FIGWRIGHT_TOKEN`。
+
+权限依旧由 `FIGWRIGHT_READONLY` 决定：你在本机开启只读，对方连上来就**只看到读工具**、无法改你的文件——无需在对方机器上做任何额外设置。
+
+> 该 HTTP 端点与本地 stdio **共用同一进程与端口**：本机智能体走 stdio，远端智能体走 `/mcp`，两者看到的是同一套（按只读策略过滤后的）工具。
+
+> 防火墙提示：若对方连不上，请确认你 Mac 的防火墙允许入站到 `3055` 端口（macOS：系统设置 → 网络 → 防火墙；或用 `socketfilterfw`）。同一 LAN 内通常无需额外路由配置。
+
 ### 连接插件
 
 最快的方式是使用服务器启动时打印的**邀请串（invite）**：

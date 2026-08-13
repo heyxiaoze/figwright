@@ -169,7 +169,9 @@ const onTest = (): void => {
     }
   });
   testTimer = setTimeout(() => done(false, '超时：3 秒内未建立连接'), 3000);
-  client.connect().catch(err => done(false, describeError(String(err))));
+  // The handshake result (success or a token/host error) surfaces via the subscribe() callbacks
+  // above; swallowing connect()'s rejection here just avoids an unhandled-promise crash.
+  void client.connect().catch(() => {});
 };
 
 onBeforeUnmount(() => {

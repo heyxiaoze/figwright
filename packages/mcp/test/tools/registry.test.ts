@@ -32,7 +32,7 @@ describe('filterToolSpecs', () => {
     // A representative write is gone.
     const anyWrite = ALL_TOOL_SPECS.find(spec => spec.kind === 'write');
     expect(anyWrite).toBeDefined();
-    if (anyWrite) expect(byName.has(anyWrite.name)).toBe(false);
+    expect(byName.has(anyWrite!.name)).toBe(false);
   });
 
   it('does not mutate the input array', () => {

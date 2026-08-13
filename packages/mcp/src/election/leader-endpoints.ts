@@ -9,6 +9,9 @@ import type { Relay } from '../relay/relay.js';
 export const PING_PATH = '/ping';
 export const RPC_PATH = '/rpc';
 export const ABDICATE_PATH = '/abdicate';
+// The remote MCP endpoint is served by a separate handler mounted after this one; requests for it
+// fall through here untouched rather than hitting the 404 at the bottom of this handler.
+const MCP_PATH = '/mcp';
 
 /**
  * Refuse to abdicate while relay traffic is this recent, even with nothing in flight: a multi-call
@@ -102,6 +105,10 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
   };
 
   const handler = (req: IncomingMessage, res: ServerResponse): void => {
+    // Remote MCP requests are handled by attachMcpHttp (mounted after this handler). Leave them
+    // untouched so that handler can answer — do not 404 them here.
+    if (req.url === MCP_PATH || (req.url ?? '').startsWith(`${MCP_PATH}?`)) return;
+
     // Addressed by a name that isn't ours: DNS rebinding, where the browser thinks it is talking to
     // the attacker's domain and so both omits Origin and gets to read the reply. In LAN mode
     // (bindHost set) this relaxes to admit the bound LAN interface address.
