@@ -253,7 +253,7 @@ describe('createPanelController', () => {
     // on open and on request, and persists (then echoes) anything the UI saves.
     const settingsMessage = (
       f: Fake,
-    ): { kind: string; host: string; port: number; token: string } | undefined => {
+    ): { kind: string; host: string; port: number } | undefined => {
       const calls = (f.ui.postMessage as ReturnType<typeof vi.fn>).mock.calls;
       for (const [message] of calls) {
         if (
@@ -261,7 +261,7 @@ describe('createPanelController', () => {
           message !== null &&
           (message as { kind?: string }).kind === 'panel-settings'
         ) {
-          return message as { kind: string; host: string; port: number; token: string };
+          return message as { kind: string; host: string; port: number };
         }
       }
       return undefined;
@@ -276,7 +276,6 @@ describe('createPanelController', () => {
       const msg = settingsMessage(f);
       expect(msg?.host).toBe('127.0.0.1');
       expect(msg?.port).toBe(DEFAULT_PORT);
-      expect(msg?.token).toBe('');
     });
 
     it('pushes stored settings to the UI on open', async () => {
@@ -284,7 +283,6 @@ describe('createPanelController', () => {
       f.clientStorage.setAsync(STORED_SETTINGS_KEY, {
         host: '192.168.1.10',
         port: DEFAULT_PORT,
-        token: 'abc123',
       });
 
       controllerFor(f).open('<html></html>');
@@ -292,7 +290,6 @@ describe('createPanelController', () => {
 
       const msg = settingsMessage(f);
       expect(msg?.host).toBe('192.168.1.10');
-      expect(msg?.token).toBe('abc123');
     });
 
     it('responds to a settings request with the stored settings', async () => {
@@ -309,17 +306,15 @@ describe('createPanelController', () => {
       const f = fakeFigma();
       const panel = controllerFor(f);
 
-      panel.apply(createPanelSettings({ host: '10.0.0.5', port: DEFAULT_PORT, token: 'secret' }));
+      panel.apply(createPanelSettings({ host: '10.0.0.5', port: DEFAULT_PORT }));
       await settle();
 
       expect(f.clientStorage.setAsync).toHaveBeenCalledWith(STORED_SETTINGS_KEY, {
         host: '10.0.0.5',
         port: DEFAULT_PORT,
-        token: 'secret',
       });
       const msg = settingsMessage(f);
       expect(msg?.host).toBe('10.0.0.5');
-      expect(msg?.token).toBe('secret');
     });
   });
 });

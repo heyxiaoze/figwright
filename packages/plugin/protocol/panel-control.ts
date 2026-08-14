@@ -88,22 +88,20 @@ export interface PanelReveal {
 }
 
 /**
- * Connection target the plugin's relay client uses. In the default loopback config the plugin and
- * the Figwright MCP server run on the same machine, so `host` is `127.0.0.1` and `port` is
- * `DEFAULT_PORT`, and `token` is empty. When the server is bound to a LAN interface (so the plugin
- * can run on another machine), the UI lets the user set `host` to that machine's address, `port`
- * accordingly, and the shared `token` the server requires — see the LAN-mode docs and `local-access.ts`.
+ * Connection target the plugin's relay client uses. The plugin always runs on the same machine as
+ * the Figwright MCP server — the relay is loopback-only by design — so `host` is `127.0.0.1` and
+ * `port` is `DEFAULT_PORT` in the normal case. No shared secret is involved: loopback *is* the
+ * boundary, and any non-loopback relay connection is refused at the socket layer (see relay.ts and
+ * local-access.ts). Only `host`/`port` remain as user-tunable settings.
  */
 export interface ConnectionSettings {
   host: string;
   port: number;
-  token: string;
 }
 
 export const DEFAULT_CONNECTION_SETTINGS: ConnectionSettings = {
   host: '127.0.0.1',
   port: DEFAULT_PORT,
-  token: '',
 };
 
 /** Ask the sandbox to send back the currently-stored connection settings. */
@@ -155,7 +153,6 @@ export const createPanelSettings = (settings: ConnectionSettings): PanelSettings
   kind: 'panel-settings',
   host: settings.host,
   port: settings.port,
-  token: settings.token,
 });
 
 const isFiniteNumber = (value: unknown): value is number =>
@@ -197,8 +194,7 @@ export const parsePanelControl = (raw: unknown): PanelControlMessage | null => {
     case 'panel-settings': {
       if (typeof msg.host !== 'string') return null;
       if (!isFiniteNumber(msg.port)) return null;
-      if (typeof msg.token !== 'string') return null;
-      return createPanelSettings({ host: msg.host, port: msg.port, token: msg.token });
+      return createPanelSettings({ host: msg.host, port: msg.port });
     }
     default: {
       return null;

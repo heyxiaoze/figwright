@@ -30,7 +30,7 @@ export interface RelaySession {
  * That routing behaviour is the reason this lives in one composable rather than being spread across
  * components — the invariants below are subtle and were arrived at empirically.
  *
- * `settings` (host/port/token) is reactive so a save in the Settings tab — or a settings push from
+ * `settings` (host/port) is reactive so a save in the Settings tab — or a settings push from
  * the sandbox — rebuilds the client against the new target. The default loopback target connects on
  * mount; only a *change* reconnects, so an identical echo from the sandbox doesn't churn the socket.
  */
@@ -47,10 +47,6 @@ export const useRelaySession = (
       ports: [s.port],
       clientVersion: appVersion,
       host: s.host,
-      // Empty token (the loopback default) → undefined, so the client opens a plain socket with no
-      // subprotocol — matching a relay that isn't checking. A non-empty token is offered as the
-      // WebSocket subprotocol and echoed in $hello.
-      token: s.token === '' ? undefined : s.token,
       log: msg => console.log(msg),
     });
     client.setToolHandler(bridge.handler);
@@ -85,12 +81,10 @@ export const useRelaySession = (
   // sandbox echoing back the stored loopback defaults) doesn't tear down and rebuild the socket.
   let lastHost = settings.value.host;
   let lastPort = settings.value.port;
-  let lastToken = settings.value.token;
   watch(settings, s => {
-    if (s.host === lastHost && s.port === lastPort && s.token === lastToken) return;
+    if (s.host === lastHost && s.port === lastPort) return;
     lastHost = s.host;
     lastPort = s.port;
-    lastToken = s.token;
     void rebuild(s);
   });
 

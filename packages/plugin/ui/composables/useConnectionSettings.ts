@@ -11,7 +11,7 @@ import {
 } from '../sandbox/messaging.js';
 
 export interface ConnectionSettingsStore {
-  /** Reactive copy of the configured connection target (host/port/token). */
+  /** Reactive copy of the configured connection target (host/port). */
   settings: Ref<ConnectionSettings>;
   /** True once the sandbox has answered our initial request (or a save has happened). */
   initialized: Ref<boolean>;

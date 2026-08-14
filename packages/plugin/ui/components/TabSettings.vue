@@ -10,7 +10,7 @@ import { copyToClipboard } from '../lib/clipboard.js';
 import UiSection from './UiSection.vue';
 
 const props = defineProps<{
-  /** The currently-applied connection target (host/port/token). */
+  /** The currently-applied connection target (host/port). */
   settings: ConnectionSettings;
   /** Persist (and apply) new settings. */
   save: (next: ConnectionSettings) => void;
@@ -22,7 +22,6 @@ const props = defineProps<{
 const form = reactive<ConnectionSettings>({
   host: props.settings.host,
   port: props.settings.port,
-  token: props.settings.token,
 });
 
 // Adopt external changes (the sandbox echo, or a reset) without clobbering mid-edit is acceptable —
@@ -32,45 +31,32 @@ watch(
   s => {
     form.host = s.host;
     form.port = s.port;
-    form.token = s.token;
   },
 );
 
 const target = computed(() => `ws://${form.host}:${form.port}`);
-
-// Loopback stays the implicit boundary (no token); anything else is LAN mode, where the server
-// requires the token on every connection — so the field is mandatory there.
-const isLan = computed(
-  () => form.host !== '127.0.0.1' && form.host !== 'localhost' && form.host !== '::1' && form.host !== '',
-);
 
 const portError = computed(() => {
   const p = Number(form.port);
   return !Number.isInteger(p) || p <= 0 || p > 65_535;
 });
 
-const tokenMissing = computed(() => isLan.value && form.token.trim() === '');
-
-// A bad port is the only thing that should block saving — a missing token is a warning, not a hard
-// stop (loopback never needs one, and a LAN connection that lacks it simply fails the handshake with
-// a clear message). Previously `tokenMissing` disabled the button, which left it greyed-out and
-// unclickable even on loopback, where no token is required.
+// A bad port is the only thing that should block saving.
 const canSave = computed(() => !portError.value);
 
 const onSave = (): void => {
   if (portError.value) return;
-  props.save({ host: form.host.trim(), port: Number(form.port), token: form.token });
+  props.save({ host: form.host.trim(), port: Number(form.port) });
 };
 
 const resetLoopback = (): void => {
   form.host = '127.0.0.1';
   form.port = DEFAULT_PORT;
-  form.token = '';
 };
 
 // --- Quick-connect via invite string ---------------------------------------------------------
-// The server prints one-line `figwright://connect?host=&port=&token=` in LAN mode; pasting it fills
-// the three fields in one go so the user never transcribes the 32-char token by hand.
+// The server prints one-line `figwright://connect?host=&port=` in LAN mode; pasting it fills the
+// fields in one go so the user never transcribes them by hand.
 const inviteRaw = ref('');
 const inviteError = ref<string | null>(null);
 
@@ -78,12 +64,11 @@ const applyInvite = (): void => {
   const parsed = parseInvite(inviteRaw.value);
   if (parsed === null) {
     inviteError.value =
-      '无法识别的邀请串：应以 figwright://connect? 开头，且包含 host / port / token。';
+      '无法识别的邀请串：应以 figwright://connect? 开头，且包含 host / port。';
     return;
   }
   form.host = parsed.host;
   form.port = parsed.port;
-  form.token = parsed.token;
   inviteError.value = null;
   inviteRaw.value = '';
   // Auto-save and reconnect so the user doesn't have to click "Save & reconnect" separately.
@@ -108,9 +93,6 @@ const copy = async (text: string, label: string): Promise<void> => {
 // bare "Disconnected" with no hint where to look.
 const describeError = (err: string): string => {
   const e = err.toLowerCase();
-  if (e.includes('token') || e.includes('hello rejected') || e.includes('unauthorized')) {
-    return '连接被拒绝：Token 不正确，或服务器未开启 LAN 模式（未在 FIGWRIGHT_HOST 绑定非回环地址）。';
-  }
   if (
     e.includes('socket error') ||
     e.includes('refused') ||
@@ -129,7 +111,7 @@ const connError = computed(() => {
 });
 
 // "Test connection" opens a throwaway RelayClient against the current form values and reports
-// whether the handshake (incl. token) succeeds, without disturbing the live panel connection.
+// whether the handshake succeeds, without disturbing the live panel connection.
 const testing = ref(false);
 const testResult = ref<{ ok: boolean; message: string } | null>(null);
 let testStop: (() => void) | undefined;
@@ -141,10 +123,6 @@ const onTest = (): void => {
     testResult.value = { ok: false, message: '端口无效，无法测试' };
     return;
   }
-  if (tokenMissing.value) {
-    testResult.value = { ok: false, message: 'LAN 模式需要先填写 Token' };
-    return;
-  }
   testing.value = true;
   testResult.value = null;
 
@@ -152,7 +130,6 @@ const onTest = (): void => {
     ports: [Number(form.port)],
     clientVersion: __APP_VERSION__,
     host: form.host.trim(),
-    token: form.token === '' ? undefined : form.token,
     log: () => {},
   });
 
@@ -175,7 +152,7 @@ const onTest = (): void => {
     }
   });
   testTimer = setTimeout(() => done(false, '超时：3 秒内未建立连接'), 3000);
-  // The handshake result (success or a token/host error) surfaces via the subscribe() callbacks
+  // The handshake result (success or a host error) surfaces via the subscribe() callbacks
   // above; swallowing connect()'s rejection here just avoids an unhandled-promise crash.
   void client.connect().catch(() => {});
 };
@@ -190,8 +167,8 @@ onBeforeUnmount(() => {
 <template>
   <UiSection title="快速连接（邀请）">
     <p class="text-meta text-dim">
-      把服务器启动日志里的 <span class="text-fg">invite</span> 一行整段粘贴进来，自动填好 Host / Port /
-      Token，免去手抄长 Token。
+      把服务器启动日志里的 <span class="text-fg">invite</span> 一行整段粘贴进来，自动填好 Host / Port，
+      免去手抄。
     </p>
     <div class="mt-2 flex gap-2">
       <input
@@ -200,7 +177,7 @@ onBeforeUnmount(() => {
         spellcheck="false"
         autocomplete="off"
         class="min-w-0 flex-1 rounded-md border border-line bg-raised px-2 py-1.5 text-panel text-fg outline-none focus:border-brand"
-        placeholder="figwright://connect?host=…&port=3055&token=…"
+        placeholder="figwright://connect?host=…&port=3055"
       />
       <button
         type="button"
@@ -215,10 +192,10 @@ onBeforeUnmount(() => {
 
   <UiSection title="Connection">
     <p class="text-meta text-dim">
-      The plugin connects to the Figwright server over this target. The default
-      <span class="text-fg">127.0.0.1</span> keeps everything on this machine. To run the plugin on
-      another machine, set <span class="text-fg">Host</span> to the server's LAN address and enter the
-      server's token.
+      The plugin connects to the Figwright server over this target. The relay is loopback-only, so the
+      plugin must run on the <em>same machine</em> as the server — the default
+      <span class="text-fg">127.0.0.1</span> keeps everything local. Change <span class="text-fg">Host</span>
+      / <span class="text-fg">Port</span> only if your server binds a different local address.
     </p>
 
     <label class="mt-3 block">
@@ -246,33 +223,6 @@ onBeforeUnmount(() => {
       <span v-if="portError" class="mt-1 block text-meta text-danger"
         >Enter a port between 1 and 65535.</span
       >
-    </label>
-
-    <label class="mt-2 block">
-      <span class="flex items-center justify-between">
-        <span class="text-meta text-dim">Token</span>
-        <button
-          type="button"
-          class="text-meta text-brand transition-opacity hover:underline disabled:opacity-40"
-          :disabled="form.token === ''"
-          @click="copy(form.token, 'Token')"
-        >
-          复制
-        </button>
-      </span>
-      <input
-        v-model="form.token"
-        type="text"
-        spellcheck="false"
-        autocomplete="off"
-        class="mt-1 w-full rounded-md border border-line bg-raised px-2 py-1.5 text-panel text-fg outline-none focus:border-brand"
-        :class="tokenMissing ? 'border-danger' : ''"
-        placeholder="required in LAN mode"
-      />
-      <span v-if="tokenMissing" class="mt-1 block text-meta text-danger">
-        A token is required when Host is not loopback — paste the server's invite, or copy it from the
-        server's startup log.
-      </span>
     </label>
 
     <div class="mt-3 rounded-md bg-raised px-2 py-1.5">
@@ -346,7 +296,7 @@ onBeforeUnmount(() => {
       >
     </div>
     <p class="mt-1 text-meta text-faint">
-      用当前表单的 Host / Port / Token 临时握手一次，不影响已保存的连接。
+      用当前表单的 Host / Port 临时握手一次，不影响已保存的连接。
     </p>
   </UiSection>
 </template>

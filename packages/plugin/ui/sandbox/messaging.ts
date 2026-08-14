@@ -73,7 +73,7 @@ export const onSandboxContext = (listener: (event: PluginContextEvent) => void):
 
 /**
  * Subscribe to connection-settings pushes from the sandbox. The sandbox owns `figma.clientStorage`
- * (the iframe cannot reach it), so it is the source of truth for host/port/token and sends them
+ * (the iframe cannot reach it), so it is the source of truth for host/port and sends them
  * down both on open and in reply to `requestConnectionSettings`. Returns an unsubscribe.
  */
 export const onSandboxSettings = (
@@ -82,7 +82,7 @@ export const onSandboxSettings = (
   onSandboxMessage(message => {
     const parsed = parsePanelControl(message);
     if (parsed !== null && parsed.kind === 'panel-settings') {
-      listener({ host: parsed.host, port: parsed.port, token: parsed.token });
+      listener({ host: parsed.host, port: parsed.port });
     }
   });
 

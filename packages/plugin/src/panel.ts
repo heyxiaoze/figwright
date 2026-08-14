@@ -23,7 +23,7 @@ import { revealNodes } from './reveal.js';
 /** `clientStorage` key holding the last size the user dragged the window to. */
 export const STORED_SIZE_KEY = 'ui-size';
 
-/** `clientStorage` key holding the connection settings (host/port/token) for LAN mode. */
+/** `clientStorage` key holding the connection settings (host/port) for the local relay. */
 export const STORED_SETTINGS_KEY = 'connection-settings';
 
 export interface PanelController {
@@ -66,15 +66,14 @@ export const createPanelController = (figmaCtx: typeof figma): PanelController =
     try {
       const saved: unknown = await figmaCtx.clientStorage.getAsync(STORED_SETTINGS_KEY);
       if (typeof saved !== 'object' || saved === null) return DEFAULT_CONNECTION_SETTINGS;
-      const { host, port, token } = saved as {
+      const { host, port } = saved as {
         host?: unknown;
         port?: unknown;
-        token?: unknown;
       };
-      if (typeof host !== 'string' || typeof port !== 'number' || typeof token !== 'string') {
+      if (typeof host !== 'string' || typeof port !== 'number') {
         return DEFAULT_CONNECTION_SETTINGS;
       }
-      return { host, port, token };
+      return { host, port };
     } catch {
       return DEFAULT_CONNECTION_SETTINGS;
     }
@@ -139,7 +138,6 @@ export const createPanelController = (figmaCtx: typeof figma): PanelController =
           const settings: ConnectionSettings = {
             host: message.host,
             port: message.port,
-            token: message.token,
           };
           figmaCtx.clientStorage.setAsync(STORED_SETTINGS_KEY, settings).catch(() => {});
           // Echo back so the UI (and any other live tab) reflects the saved value.

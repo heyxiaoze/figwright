@@ -36,12 +36,6 @@ export interface RelayClientOptions {
   clientVersion: string;
   sessionId?: string;
   host?: string;
-  /**
-   * LAN-mode shared secret. When set (the server bound a non-loopback host and armed token auth),
-   * it is offered as the WebSocket subprotocol and echoed in `$hello` — both are required by the
-   * relay, so a plugin without it can't connect cross-machine. Empty in the default loopback config.
-   */
-  token?: string | undefined;
   WS?: WebSocketCtor;
   log?: (msg: string) => void;
   helloTimeoutMs?: number;
@@ -114,7 +108,6 @@ export class RelayClient {
       ports: opts.ports,
       clientVersion: opts.clientVersion,
       host: opts.host ?? '127.0.0.1',
-      token: opts.token,
       WS: opts.WS ?? (globalThis as { WebSocket?: WebSocketCtor }).WebSocket!,
       log: opts.log ?? ((): void => {}),
       helloTimeoutMs: opts.helloTimeoutMs ?? DEFAULT_HELLO_TIMEOUT_MS,
@@ -253,13 +246,10 @@ export class RelayClient {
   private attemptPort(port: number): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const url = `ws://${this.opts.host}:${port}`;
-      // LAN mode: the relay requires the shared token as a WebSocket subprotocol. Offer it on the
-      // upgrade; the server's verifyClient refuses any peer that doesn't name it. Loopback mode sets
-      // no token, so we open a plain (no subprotocol) socket — matching a relay that isn't checking.
-      const ws =
-        this.opts.token !== undefined
-          ? new this.opts.WS(url, this.opts.token)
-          : new this.opts.WS(url);
+      // The relay is loopback-only: the plugin always connects from 127.0.0.1, and the server's
+      // verifyClient refuses any non-loopback upgrade before it becomes a session. No shared secret
+      // or subprotocol is involved, so we open a plain socket.
+      const ws = new this.opts.WS(url);
       ws.binaryType = 'arraybuffer';
 
       const cleanup = (): void => {
@@ -290,9 +280,6 @@ export class RelayClient {
           clientType: 'plugin',
           clientVersion: this.opts.clientVersion,
           protocolVersion: PROTOCOL_VERSION,
-          // Echo the token in $hello too — the upgrade subprotocol is the primary gate, this is the
-          // defence-in-depth path that also covers any transport without subprotocols.
-          ...(this.opts.token !== undefined ? { token: this.opts.token } : {}),
         };
         const env = createRequest({
           id: newId(),
