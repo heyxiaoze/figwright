@@ -20,3 +20,6 @@ coverage/
 
 # Local-only working files (planning doc + competitor reference dumps) — not part of the repo
 .local/
+
+# Figwright LAN 控制台配置（含 token 机密，不入库）
+scripts/.figwright-dashboard.json
