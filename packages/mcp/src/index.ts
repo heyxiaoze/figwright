@@ -365,26 +365,22 @@ if (READONLY) {
   );
 }
 
-// Surface the exact connection target(s) the plugin must use. In LAN mode the plugin lives on
-// another machine, so print every reachable interface address plus the shared token it must enter.
+// Topology reminder printed at startup. The plugin runs on THIS machine (Figma on the user's Mac)
+// and reaches the relay over the loopback address — the local plugin needs no token. Every other
+// machine connects to /mcp (HTTP, token-gated) instead. So the banner advertises two distinct
+// targets: the loopback relay for the local plugin (token-free), and the HTTP /mcp endpoint for
+// remote partners (token required). Printed regardless of bind mode so the operator always sees the
+// correct local plugin target; the partner lines appear only in LAN mode with a token.
+const pluginInviteHost = '127.0.0.1';
+log(`[figwright] plugin → ws://${pluginInviteHost}:${PORT}  (local, no token)`);
+log(`[figwright] invite: figwright://connect?host=${pluginInviteHost}&port=${PORT}`);
 if (LAN_MODE && primaryToken !== undefined) {
   const hosts = HOST === '0.0.0.0' || HOST === '::' ? [...localInterfaceHosts()] : [HOST];
   if (hosts.length === 0) {
-    log(`[figwright] LAN mode: could not enumerate a LAN interface — connect via ${HOST}`);
+    log(`[figwright] LAN mode: could not enumerate a LAN interface — partners connect via ${HOST}`);
   }
   for (const h of hosts) {
-    log(`[figwright] plugin → ws://${h}:${PORT}  (token: ${primaryToken})`);
-  }
-  // One-line copy-paste invite: the operator pastes this into the plugin's Settings tab to fill
-  // host/port/token automatically — no transcribing the token by hand.
-  if (hosts.length > 0) {
-    const inviteHost = hosts[0];
-    if (inviteHost !== undefined) {
-      log(
-        `[figwright] invite: figwright://connect?host=${encodeURIComponent(inviteHost)}` +
-          `&port=${PORT}&token=${encodeURIComponent(primaryToken)}`,
-      );
-    }
+    log(`[figwright] partner → http://${h}:${PORT}/mcp  (token: ${primaryToken})`);
   }
 }
 
