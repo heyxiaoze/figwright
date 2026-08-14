@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
 
+import { buildTokenRegistry, generateToken, type TokenRegistry } from './tokens.js';
 import { DEFAULT_PORT, type GetScreenshotResult, newId, PROTOCOL_VERSION } from '@figwright/shared';
 import { McpServer } from '@modelcontextprotocol/server';
 import type { CallToolResult } from '@modelcontextprotocol/server';
@@ -88,23 +88,47 @@ const LAN_MODE = !LOOPBACK_HOSTS.has(HOST);
 // relay is on the network so the read-only agent still authenticates.
 const READONLY = /^1|true|yes|on$/i.test(process.env.FIGWRIGHT_READONLY ?? '');
 
-let TOKEN: string | undefined;
+// The LAN boundary is now multi-token: the operator can issue several named tokens (each optionally
+// pinned read-only) and any peer presenting one is admitted. `requireAuth` is the LAN flag — when the
+// relay is loopback-only no token is required, so `tokens` is passed as null and the handlers treat it
+// as "open". In LAN mode we build the registry from FIGWRIGHT_TOKEN (legacy) and/or FIGWRIGHT_TOKENS
+// (JSON array); if neither is set we auto-generate a random token so a freshly-started server on the
+// network is never unauthenticated.
+let tokens: TokenRegistry | null = null;
+let autoToken: string | undefined;
 if (LAN_MODE) {
-  const provided = process.env.FIGWRIGHT_TOKEN;
-  if (provided !== undefined && provided !== '') {
-    TOKEN = provided;
-    log(`[figwright] LAN mode (host ${HOST}) — using FIGWRIGHT_TOKEN from environment`);
-  } else {
-    TOKEN = randomBytes(24).toString('base64url');
+  const legacy = process.env.FIGWRIGHT_TOKEN;
+  const tokensJson = process.env.FIGWRIGHT_TOKENS;
+  if ((legacy === undefined || legacy === '') && tokensJson === undefined) {
+    autoToken = generateToken();
     log(
-      `[figwright] LAN mode (host ${HOST}) — auto-generated token: ${TOKEN} ` +
-        `(set FIGWRIGHT_TOKEN to pin it across restarts)`,
+      `[figwright] LAN mode (host ${HOST}) — auto-generated token: ${autoToken} ` +
+        `(set FIGWRIGHT_TOKEN / FIGWRIGHT_TOKENS to pin it across restarts)`,
     );
   }
+  tokens = buildTokenRegistry({
+    legacyToken: legacy,
+    tokensJson,
+    autoToken,
+    serverReadonly: READONLY,
+  });
+  log(`[figwright] LAN mode (host ${HOST}) — ${tokens.list().length} token(s) accepted`);
+} else if (process.env.FIGWRIGHT_TOKEN !== undefined || process.env.FIGWRIGHT_TOKENS !== undefined) {
+  // Loopback bind but a token was explicitly supplied — honour it (harmless, and lets a local agent
+  // authenticate the same way a remote one would).
+  tokens = buildTokenRegistry({
+    legacyToken: process.env.FIGWRIGHT_TOKEN,
+    tokensJson: process.env.FIGWRIGHT_TOKENS,
+    serverReadonly: READONLY,
+  });
 }
 
-const node = new Node({ serverVersion: SERVER_VERSION, port: PORT, host: HOST, token: TOKEN, log });
-const follower = new Follower({ leaderUrl: node.leaderUrl, token: TOKEN, log });
+// The display token for connection guides (plugin invite / mcp-remote command) and for the follower's
+// own /rpc auth to the leader. null in loopback mode where no token is expected.
+const primaryToken = tokens?.primary()?.value;
+
+const node = new Node({ serverVersion: SERVER_VERSION, port: PORT, host: HOST, token: primaryToken, log });
+const follower = new Follower({ leaderUrl: node.leaderUrl, token: primaryToken, log });
 const election = new Election({ node, follower, buildId: BUILD_ID, log });
 
 let currentDetach: (() => void) | null = null;
@@ -125,7 +149,7 @@ node.onRoleChange(role => {
         // In LAN mode the socket is network-reachable; relax the Host gate to the bound interface
         // and arm token auth on the mutating POST endpoints (the follower carries the same token).
         bindHost: HOST,
-        token: TOKEN,
+        tokens,
         // Newest build wins: a follower on a newer build asks us to step down; the port frees for
         // it within ms and the plugin reconnects to the new leader on its next retry (~250ms).
         onAbdicate: () => election.yieldLeadership(),
@@ -133,7 +157,7 @@ node.onRoleChange(role => {
       });
       const detachMcp = attachMcpHttp(res.http, {
         createServer: createMcpServer,
-        token: TOKEN,
+        tokens,
         bindHost: HOST,
         log,
       });
@@ -178,7 +202,7 @@ const SPECIAL_HANDLERS: Record<string, ToolHandler> = {
             serverVersion: SERVER_VERSION,
             buildId: BUILD_ID,
             bindHost: HOST,
-            token: TOKEN,
+            token: primaryToken,
             log,
           }),
         ),
@@ -221,13 +245,18 @@ const SPECIAL_HANDLERS: Record<string, ToolHandler> = {
 // through. A 2025-era client is served exactly as `new StdioServerTransport()` + `connect()` served
 // it; a 2026-07-28 client negotiates the modern revision instead — which a hand-wired transport
 // can't do. On stdio there is exactly one connection per process, so this runs once.
-const createMcpServer = (): McpServer => {
+// Builds a fresh McpServer. `readonlyOverride` lets a per-token permission win over the server-wide
+// flag: a remote agent that authenticated with a read-only token gets a read-only server even when
+// the relay as a whole is read-write. `undefined` (or a non-boolean, e.g. the `{ era }` object
+// serveStdio passes the factory) → server-wide FIGWRIGHT_READONLY.
+const createMcpServer = (readonlyOverride?: boolean): McpServer => {
+  const readonly = typeof readonlyOverride === 'boolean' ? readonlyOverride : READONLY;
   const mcp = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION },
     { instructions: SERVER_INSTRUCTIONS },
   );
 
-  for (const spec of filterToolSpecs(ALL_TOOL_SPECS, { readonly: READONLY })) {
+  for (const spec of filterToolSpecs(ALL_TOOL_SPECS, { readonly })) {
     const run: ToolHandler =
       SPECIAL_HANDLERS[spec.name] ??
       (async args => {
@@ -338,22 +367,22 @@ if (READONLY) {
 
 // Surface the exact connection target(s) the plugin must use. In LAN mode the plugin lives on
 // another machine, so print every reachable interface address plus the shared token it must enter.
-if (LAN_MODE && TOKEN !== undefined) {
+if (LAN_MODE && primaryToken !== undefined) {
   const hosts = HOST === '0.0.0.0' || HOST === '::' ? [...localInterfaceHosts()] : [HOST];
   if (hosts.length === 0) {
     log(`[figwright] LAN mode: could not enumerate a LAN interface — connect via ${HOST}`);
   }
   for (const h of hosts) {
-    log(`[figwright] plugin → ws://${h}:${PORT}  (token: ${TOKEN})`);
+    log(`[figwright] plugin → ws://${h}:${PORT}  (token: ${primaryToken})`);
   }
   // One-line copy-paste invite: the operator pastes this into the plugin's Settings tab to fill
   // host/port/token automatically — no transcribing the token by hand.
-  if (TOKEN !== undefined && hosts.length > 0) {
+  if (hosts.length > 0) {
     const inviteHost = hosts[0];
     if (inviteHost !== undefined) {
       log(
         `[figwright] invite: figwright://connect?host=${encodeURIComponent(inviteHost)}` +
-          `&port=${PORT}&token=${encodeURIComponent(TOKEN)}`,
+          `&port=${PORT}&token=${encodeURIComponent(primaryToken)}`,
       );
     }
   }

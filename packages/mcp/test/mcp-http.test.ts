@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { LATEST_PROTOCOL_VERSION, McpServer } from '@modelcontextprotocol/server';
 
 import { attachMcpHttp } from '../src/mcp-http.js';
+import { buildTokenRegistry } from '../src/tokens.js';
 
 /**
  * These exercise the Node↔Web Standard bridge plus token gating without depending on the full
@@ -20,9 +21,11 @@ const TOKEN = 'test-secret';
 async function start(token: string | undefined): Promise<Harness> {
   const http: Server = createServer();
   const mcp = new McpServer({ name: 'figwright-test', version: '0.0.0' });
+  // null → loopback posture (no auth); otherwise a single-entry registry from the legacy token.
+  const tokens = token === undefined ? null : buildTokenRegistry({ legacyToken: token });
   const detach = attachMcpHttp(http, {
     createServer: () => mcp,
-    token,
+    tokens,
     log: () => {},
   });
   // A fallback handler proves the mcp handler leaves non-/mcp paths alone (no swallowed 404s).

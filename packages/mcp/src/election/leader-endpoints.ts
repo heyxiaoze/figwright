@@ -4,6 +4,7 @@ import { ErrorCode, getRelayBudget, RpcRequestSchema, type RpcResponse } from '@
 import { decode, encode } from '@msgpack/msgpack';
 
 import { hasContentType, isAllowedHost, isAllowedHttpOrigin } from '../local-access.js';
+import type { TokenRegistry } from '../tokens.js';
 import type { Relay } from '../relay/relay.js';
 
 export const PING_PATH = '/ping';
@@ -42,12 +43,13 @@ export interface LeaderEndpointDeps {
    */
   bindHost?: string;
   /**
-   * LAN-mode shared secret. When set, the mutating POST endpoints (/rpc, /abdicate) require it as
-   * the `x-figwright-token` header — a LAN-bound socket is network-reachable, and those endpoints
-   * dispatch to / step down the leader, so an unauthenticated stranger must not reach them. The
-   * follower carries the same token; /ping stays open because it is read-only health info.
+   * LAN-mode token registry. When non-null, the mutating POST endpoints (/rpc, /abdicate) require a
+   * valid token as the `x-figwright-token` header — a LAN-bound socket is network-reachable, and
+   * those endpoints dispatch to / step down the leader, so an unauthenticated stranger must not
+   * reach them. `null` (loopback bind) leaves them open. The follower carries a valid token; /ping
+   * stays open because it is read-only health info.
    */
-  token?: string | undefined;
+  tokens?: TokenRegistry | null;
 }
 
 const readBody = (req: IncomingMessage): Promise<Buffer> =>
@@ -85,8 +87,9 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
   // `x-figwright-token` header. The co-located follower carries it; an unauthenticated peer may not
   // dispatch to the plugin or force a leadership handoff. Read-only /ping stays open on purpose.
   const tokenOk = (req: IncomingMessage): boolean => {
-    if (deps.token === undefined) return true;
-    return req.headers['x-figwright-token'] === deps.token;
+    if (deps.tokens === null || deps.tokens === undefined) return true;
+    const h = req.headers['x-figwright-token'];
+    return typeof h === 'string' && deps.tokens.has(h);
   };
   const refuseUnauthorized = (req: IncomingMessage, res: ServerResponse): boolean => {
     if (tokenOk(req)) return false;

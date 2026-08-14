@@ -20,6 +20,7 @@
  */
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
@@ -32,12 +33,20 @@ const CONFIG_PATH = join(__dirname, '.figwright-dashboard.json');
 const DASH_HTML = join(__dirname, 'dashboard.html');
 const DASH_PORT = Number(process.env.DASH_PORT ?? 3056);
 
-// 默认值：沿用已分发给对方/插件的 token，避免改了以后连不上
+// 默认值：沿用已分发给对方/插件的 token 作为 primary，避免改了以后连不上。
+// tokens 是多令牌数组，每个 { value, label?, readonly? }；readonly 可选，缺省跟随服务器全局。
 const DEFAULT_CONFIG = {
   host: '0.0.0.0', // 0.0.0.0 => 非回环 => LAN 模式（本地插件走 127.0.0.1 同样可用）
   port: 3055,
-  token: 'Psk7WEW2FoheR1zMGOoMr-fQtaqViIhG',
   readonly: true,
+  tokens: [{ value: 'Psk7WEW2FoheR1zMGOoMr-fQtaqViIhG', label: 'primary' }],
+};
+
+const generateToken = () => randomBytes(24).toString('base64url');
+
+const primaryTokenOf = (cfg) => {
+  const list = cfg.tokens ?? [];
+  return (list.find((t) => t.label === 'primary') ?? list[0])?.value ?? '';
 };
 
 // ----------------------------------------------------------------------------
@@ -52,6 +61,12 @@ function loadConfig() {
       /* 损坏就回退默认，不致命 */
     }
   }
+  // 迁移：旧的单一 token 字段 → tokens 数组（保持现有连接不中断）
+  if ((!Array.isArray(cfg.tokens) || cfg.tokens.length === 0) && typeof cfg.token === 'string' && cfg.token) {
+    cfg.tokens = [{ value: cfg.token, label: 'primary' }];
+  }
+  if (!Array.isArray(cfg.tokens)) cfg.tokens = [];
+  delete cfg.token; // 单字段已废弃，避免与 tokens 混淆
   return cfg;
 }
 let config = loadConfig();
@@ -66,30 +81,53 @@ saveConfig(); // 确保文件存在，方便用户之后手动改
 let serverProc = null;
 let startedAt = 0;
 const logLines = []; // 滚动日志
-const peers = new Map(); // ip -> { firstSeen, lastSeen, count }
+// ip -> { type, tokenLabel, firstSeen, lastSeen, count, connected }
+const peers = new Map();
+const audit = []; // { ts, peer, ip, token, tool, ok, durMs }
+
+function recordPeer(ip, patch) {
+  const now = Date.now();
+  const prev = peers.get(ip) || { firstSeen: now, count: 0 };
+  const next = { ...prev, ...patch, lastSeen: now };
+  if (patch.connected === true) next.count = prev.count + 1;
+  peers.set(ip, next);
+}
 
 function pushLog(line) {
   const ts = new Date().toISOString().slice(11, 19);
   logLines.push(`[${ts}] ${line}`);
   if (logLines.length > 500) logLines.shift();
 
-  // 抓同伴连接：
-  //   1) HTTP MCP 远程客户端：[mcp-http] POST /mcp from 192.168.x.x
-  //   2) WebSocket relay 插件：[relay] session xxx hello (resumed=...)
-  let peerIp = null;
-  const m = line.match(/\[mcp-http\][^\n]*from\s+([\d.a-fA-F:]+)/);
+  // 解析 server 发出的结构化日志，构造可观测数据：
+  //   [peer] connect type=local-plugin|remote-plugin|remote-agent ip=.. token=..
+  //   [peer] disconnect type=.. ip=..
+  //   [audit] tool_call peer=.. ip=.. token=.. tool=.. ok=true durMs=..
+  //   [mcp-http] ... from <ip>  （远程 agent 的兜底来源）
+  let m;
+  m = line.match(/\[peer\] connect type=(\S+) ip=(\S+) token=(\S+)/);
+  if (m) recordPeer(m[2], { type: m[1], tokenLabel: m[3], connected: true });
+  m = line.match(/\[peer\] disconnect type=(\S+) ip=(\S+)/);
+  if (m) recordPeer(m[2], { connected: false });
+  m = line.match(/\[mcp-http\][^\n]*from\s+([\d.a-fA-F:]+)/);
   if (m) {
-    peerIp = m[1];
-  } else if (line.match(/\[relay\]\s+session\s+\S+\s+hello/)) {
-    // WS relay 连接没有 IP（同机 loopback），用 "plugin (local)" 标识
-    peerIp = 'plugin (local)';
+    const ip = m[1];
+    if (!peers.has(ip)) recordPeer(ip, { type: 'remote-agent' });
+    else if (peers.get(ip).type === undefined) peers.get(ip).type = 'remote-agent';
   }
-  if (peerIp) {
-    const now = Date.now();
-    const prev = peers.get(peerIp) || { firstSeen: now, count: 0 };
-    prev.lastSeen = now;
-    prev.count += 1;
-    peers.set(peerIp, prev);
+  m = line.match(
+    /\[audit\] tool_call peer=(\S+) ip=(\S+) token=(\S+) tool=(\S+) ok=(\S+) durMs=(\d+)/,
+  );
+  if (m) {
+    audit.push({
+      ts,
+      peer: m[1],
+      ip: m[2],
+      token: m[3],
+      tool: m[4],
+      ok: m[5] === 'true',
+      durMs: Number(m[6]),
+    });
+    if (audit.length > 500) audit.shift();
   }
 }
 
@@ -105,7 +143,10 @@ function startServer() {
     ...process.env,
     FIGWRIGHT_HOST: config.host,
     FIGWRIGHT_PORT: String(config.port),
-    FIGWRIGHT_TOKEN: config.token,
+    // 多令牌：把 tokens 数组以 JSON 传给 server（server 优先读 FIGWRIGHT_TOKENS）。
+    // 同时保留 FIGWRIGHT_TOKEN = primary 以兼容只认单令牌的旧路径。
+    FIGWRIGHT_TOKENS: JSON.stringify(config.tokens ?? []),
+    FIGWRIGHT_TOKEN: primaryTokenOf(config),
     FIGWRIGHT_READONLY: config.readonly ? 'true' : 'false',
   };
   // 去掉可能污染子进程的 NODE_OPTIONS（如某些环境带 --use-system-ca，figwright 自带 node 不认）
@@ -144,6 +185,8 @@ function stopServer() {
       resolve({ ok: false, msg: 'server 未在运行' });
       return;
     }
+    // 标记所有同伴为断开，避免控制台残留「已连接」状态
+    for (const p of peers.values()) p.connected = false;
     const c = serverProc;
     serverProc = null;
     startedAt = 0;
@@ -194,7 +237,8 @@ function getLanIp() {
 
 function buildGuide() {
   const lanIp = getLanIp();
-  const { port, token, readonly } = config;
+  const { port, readonly } = config;
+  const token = primaryTokenOf(config);
   return {
     lanIp,
     // 本地 Figma 插件用回环地址（同机），粘贴进「粘贴邀请」
@@ -205,6 +249,7 @@ function buildGuide() {
     sshTunnel: `ssh -N -L ${port}:localhost:${port} <你的用户名>@${lanIp}`,
     sshMcpUrl: `http://localhost:${port}/mcp`,
     readonly,
+    token,
   };
 }
 
@@ -258,12 +303,18 @@ const server = createServer(async (req, res) => {
       uptimeSec: serverProc && startedAt ? Math.floor((Date.now() - startedAt) / 1000) : 0,
       config: { ...config },
       guide,
+      tokens: config.tokens,
+      primaryToken: primaryTokenOf(config),
       peers: [...peers.entries()].map(([ip, v]) => ({
         ip,
+        type: v.type,
+        tokenLabel: v.tokenLabel,
+        connected: v.connected !== false,
         count: v.count,
         firstSeen: v.firstSeen,
         lastSeen: v.lastSeen,
       })),
+      audit: audit.slice(-100).reverse(),
       logs: logLines.slice(-120),
     });
     return;
@@ -297,6 +348,56 @@ const server = createServer(async (req, res) => {
       r.msg = '已保存并重启 server 生效';
     }
     sendJson(res, r);
+    return;
+  }
+
+  // 令牌管理：列出 / 新增 / 删除 / 轮换
+  if (req.method === 'GET' && url.pathname === '/api/tokens') {
+    sendJson(res, { tokens: config.tokens, primaryToken: primaryTokenOf(config) });
+    return;
+  }
+  if (req.method === 'POST' && url.pathname === '/api/tokens') {
+    const body = await readBody(req);
+    const action = body.action;
+    let r;
+    if (action === 'add') {
+      const label =
+        typeof body.label === 'string' && body.label.trim()
+          ? body.label.trim()
+          : `peer-${config.tokens.length + 1}`;
+      const t = { value: generateToken(), label, readonly: body.readonly === true };
+      config.tokens.push(t);
+      saveConfig();
+      if (serverProc) await restartServer();
+      r = { ok: true, token: t, msg: '已新增令牌' + (serverProc ? '，已重启生效' : '') };
+    } else if (action === 'remove') {
+      const value = body.value;
+      if (!value) {
+        r = { ok: false, msg: '缺少 value' };
+      } else {
+        const before = config.tokens.length;
+        config.tokens = config.tokens.filter((t) => t.value !== value);
+        if (config.tokens.length === before) {
+          r = { ok: false, msg: '未找到该令牌' };
+        } else {
+          saveConfig();
+          if (serverProc) await restartServer();
+          r = { ok: true, msg: '已删除令牌' + (serverProc ? '，已重启生效' : '') };
+        }
+      }
+    } else if (action === 'rotate') {
+      // 轮换 primary：生成新令牌替换旧的 primary（保留其它已发令牌）
+      const value = generateToken();
+      const idx = config.tokens.findIndex((t) => t.label === 'primary');
+      if (idx >= 0) config.tokens[idx].value = value;
+      else config.tokens.unshift({ value, label: 'primary' });
+      saveConfig();
+      if (serverProc) await restartServer();
+      r = { ok: true, token: { value, label: 'primary' }, msg: '已轮换 primary 令牌' + (serverProc ? '，已重启生效' : '') };
+    } else {
+      r = { ok: false, msg: '未知 action' };
+    }
+    sendJson(res, r, r.ok ? 200 : 400);
     return;
   }
 

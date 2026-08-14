@@ -27,8 +27,50 @@
     --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   }
+  /* 亮色主题：覆盖变量即可，其余样式全部走 CSS 变量 */
+  :root[data-theme="light"] {
+    --bg: #f6f7f9; --surface: #ffffff; --surface-2: #eef0f4; --field: #f1f3f6;
+    --line: #e3e6ec; --line-strong: #cdd2db; --txt: #1b1e24; --muted: #69707d;
+    --green: #1a7f37; --red: #cf222e; --amber: #9a6700;
+    --shadow: 0 1px 2px rgba(16,18,24,.06), 0 6px 18px rgba(16,18,24,.08);
+  }
   * { box-sizing: border-box; }
   html, body { overflow-x: clip; }
+
+  .theme-btn {
+    background: transparent; color: var(--muted); border: 1px solid var(--line);
+    width: 34px; height: 34px; padding: 0; border-radius: 9px; font-size: 15px; line-height: 1;
+  }
+  .theme-btn:hover { border-color: var(--line-strong); color: var(--txt); }
+
+  .token { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(38,42,51,.5); }
+  .token:last-child { border-bottom: none; }
+  .token .meta { flex: 1; min-width: 0; }
+  .token .lab { font-weight: 600; font-size: 13px; }
+  .token .val { font-family: var(--mono); font-size: 11.5px; color: var(--muted); word-break: break-all; }
+  .token .mini { padding: 4px 9px; font-size: 11.5px; border-radius: 7px; }
+  .ro-badge { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: rgba(210,153,34,.16); color: var(--amber); border: 1px solid rgba(210,153,34,.35); margin-left: 6px; }
+
+  .peer { gap: 12px; }
+  .peer .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .peer .dot.on { background: var(--green); box-shadow: 0 0 6px rgba(63,185,80,.7); }
+  .peer .dot.off { background: var(--line-strong); }
+  .peer .meta { flex: 1; min-width: 0; }
+  .peer .lab { font-weight: 600; font-size: 13px; }
+  .peer .sub { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+
+  .stat { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 12px; }
+  .stat .s { display: flex; flex-direction: column; }
+  .stat .s b { font-size: 19px; font-weight: 700; }
+  .stat .s span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+
+  .audit-row { display: grid; grid-template-columns: 58px 1fr auto; gap: 10px; align-items: center;
+    font-family: var(--mono); font-size: 12px; padding: 6px 0; border-bottom: 1px solid rgba(38,42,51,.45); }
+  .audit-row:last-child { border-bottom: none; }
+  .audit-row .tool { color: var(--txt); }
+  .audit-row .ok { color: var(--green); } .audit-row .ok.no { color: var(--red); }
+  .audit-row .ms { color: var(--muted); }
+  .icon { font-size: 14px; }
   body {
     margin: 0; background: var(--bg); color: var(--txt);
     font-family: var(--sans);
@@ -160,7 +202,10 @@
 <div class="wrap">
   <header>
     <h1>Figwright-Plus 控制台 <span class="pill" id="modePill"></span></h1>
-    <span id="statusBadge" class="badge off">未运行</span>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <button id="btnTheme" class="theme-btn" title="切换亮/暗主题" aria-label="切换主题">🌙</button>
+      <span id="statusBadge" class="badge off">未运行</span>
+    </div>
   </header>
 
   <div class="grid">
@@ -193,18 +238,47 @@
           <input type="number" id="cPort" />
         </div>
       </div>
-      <label>令牌 (token)</label>
-      <div class="pw">
-        <input type="text" id="cToken" />
-        <button type="button" id="cTokenToggle" class="pw-toggle" aria-label="显示或隐藏令牌">显示</button>
-      </div>
       <label>模式</label>
       <select id="cReadonly">
         <option value="true">只读（对方只能读，不能写 Figma）</option>
         <option value="false">读写（对方可写回 Figma）</option>
       </select>
       <div class="btns"><button class="primary" id="btnSave">保存配置</button></div>
-      <p class="hint">保存后若 server 在运行会自动重启生效。token 改动后，记得把新邀请串重新粘贴进 Figma 插件。</p>
+      <p class="hint">保存后若 server 在运行会自动重启生效。访问令牌请在下方「访问令牌」卡片管理。</p>
+    </div>
+
+    <!-- 访问令牌 -->
+    <div class="card">
+      <h2>访问令牌</h2>
+      <div id="tokenList"></div>
+      <div class="inline" style="margin-top:14px;">
+        <div>
+          <label>新增令牌标签（可选）</label>
+          <input type="text" id="tLabel" placeholder="例如：Alice 的 VSCode" />
+        </div>
+        <div style="max-width:120px; display:flex; flex-direction:column; justify-content:flex-end;">
+          <label style="display:flex; align-items:center; gap:6px; color:var(--txt); font-size:12px;">
+            <input type="checkbox" id="tReadonly" style="width:auto;" /> 只读
+          </label>
+        </div>
+      </div>
+      <div class="btns">
+        <button class="primary" id="btnAddToken">新增令牌</button>
+        <button id="btnRotate">轮换 primary</button>
+      </div>
+      <p class="hint">每个令牌可独立撤销 / 设为只读；对方用各自令牌连接。轮换 primary 会作废旧 primary 并生成新令牌（已分享给插件的邀请串需重新复制）。</p>
+    </div>
+
+    <!-- 活动与审计 -->
+    <div class="card">
+      <h2>活动与审计</h2>
+      <div class="stat" id="statBox">
+        <div class="s"><b id="sCalls">0</b><span>工具调用</span></div>
+        <div class="s"><b id="sOk">—</b><span>成功率</span></div>
+        <div class="s"><b id="sPeers">0</b><span>已连同伴</span></div>
+        <div class="s"><b id="sRate">0</b><span>近 1 分钟</span></div>
+      </div>
+      <div id="auditList"><div class="empty">暂无工具调用</div></div>
     </div>
 
     <!-- 已连同伴 -->
@@ -287,17 +361,29 @@ function render(status) {
   // 配置表单（仅在未聚焦时回填，避免打断输入）
   if (document.activeElement !== $('cHost')) $('cHost').value = status.config.host;
   if (document.activeElement !== $('cPort')) $('cPort').value = status.config.port;
-  if (document.activeElement !== $('cToken')) $('cToken').value = status.config.token;
   if (document.activeElement !== $('cReadonly')) $('cReadonly').value = String(status.config.readonly);
 
-  // 同伴
+  // 同伴（带身份类型标签与连接状态）
   const pl = $('peerList');
   if (!status.peers.length) {
     pl.innerHTML = '<div class="empty">暂无同伴连接</div>';
   } else {
+    const icon = { 'local-plugin': '🔌', 'remote-plugin': '🧩', 'remote-agent': '🤖' };
     pl.innerHTML = status.peers.map(p => {
-      const label = p.ip === 'plugin (local)' ? '🔌 Figma 插件（本机）' : p.ip;
-      return `<div class="peer"><span>${label}</span><span class="v">${p.count} 次 · ${rel(p.lastSeen)}</span></div>`;
+      const ic = icon[p.type] || '🌐';
+      const name =
+        p.type === 'local-plugin' ? '本机 Figma 插件'
+        : p.type === 'remote-plugin' ? '远程 Figma 插件'
+        : p.type === 'remote-agent' ? '远程智能体'
+        : p.ip;
+      const sub = [p.tokenLabel ? '令牌: ' + p.tokenLabel : null, p.ip, rel(p.lastSeen)]
+        .filter(Boolean).join(' · ');
+      const on = p.connected !== false;
+      return `<div class="peer">
+        <span class="dot ${on ? 'on' : 'off'}"></span>
+        <div class="meta"><div class="lab">${ic} ${name}</div><div class="sub">${sub}</div></div>
+        <span class="v">${p.count} 次</span>
+      </div>`;
     }).join('');
   }
 
@@ -317,6 +403,67 @@ function render(status) {
     logEl.scrollTop = logEl.scrollHeight;
   }
   lastLogLen = status.logs.length;
+
+  renderTokens(status);
+  renderAudit(status);
+}
+
+const enc = (s) => encodeURIComponent(s);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+));
+
+function renderTokens(status) {
+  const list = status.tokens || [];
+  const el = $('tokenList');
+  if (!list.length) { el.innerHTML = '<div class="empty">尚未配置令牌</div>'; return; }
+  el.innerHTML = list.map((t, i) => {
+    const masked = t.value.length > 12 ? t.value.slice(0, 6) + '…' + t.value.slice(-4) : t.value;
+    const ro = t.readonly ? '<span class="ro-badge">只读</span>' : '';
+    const lbl = t.label ? t.label : '令牌 ' + (i + 1);
+    return `<div class="token">
+      <div class="meta"><div class="lab">${esc(lbl)}${ro}</div><div class="val">${masked}</div></div>
+      <button class="mini" data-act="copy" data-val="${enc(t.value)}">复制</button>
+      <button class="mini danger" data-act="del" data-val="${enc(t.value)}">删除</button>
+    </div>`;
+  }).join('');
+}
+
+function renderAudit(status) {
+  const a = status.audit || [];
+  const list = $('auditList');
+  if (!a.length) {
+    list.innerHTML = '<div class="empty">暂无工具调用</div>';
+  } else {
+    list.innerHTML = a.slice(0, 40).map(r => {
+      const okCls = r.ok ? 'ok' : 'ok no';
+      const tick = r.ok ? '✓' : '✗';
+      return `<div class="audit-row">
+        <span class="ms">${esc(r.ts)}</span>
+        <span class="tool">${esc(r.tool)} <span style="color:var(--muted)">· ${esc(r.token)} · ${esc(r.ip)}</span></span>
+        <span class="${okCls}">${tick} ${r.durMs}ms</span>
+      </div>`;
+    }).join('');
+  }
+  const calls = a.length;
+  const okN = a.filter((r) => r.ok).length;
+  $('sCalls').textContent = calls;
+  $('sOk').textContent = calls ? Math.round((okN / calls) * 100) + '%' : '—';
+  const peersOn = (status.peers || []).filter((p) => p.connected !== false).length;
+  $('sPeers').textContent = peersOn;
+  // 近 1 分钟调用数：用日志里的 HH:MM:SS 拼出今天的时间戳
+  const now = new Date();
+  const cutoff = now.getTime() - 60000;
+  let recent = 0;
+  for (const r of a) {
+    const parts = String(r.ts).split(':');
+    if (parts.length === 3) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(),
+        Number(parts[0]), Number(parts[1]), Number(parts[2])).getTime();
+      if (d >= cutoff) recent += 1;
+    }
+  }
+  $('sRate').textContent = recent;
 }
 
 async function poll() {
@@ -333,14 +480,42 @@ $('btnStop').onclick = () => post('/api/control', { action: 'stop' });
 $('btnRestart').onclick = () => post('/api/control', { action: 'restart' });
 $('btnSave').onclick = () => post('/api/config', {
   host: $('cHost').value, port: Number($('cPort').value),
-  token: $('cToken').value, readonly: $('cReadonly').value === 'true',
+  readonly: $('cReadonly').value === 'true',
 });
-$('cTokenToggle').onclick = () => {
-  const i = $('cToken');
-  if (i.type === 'password') { i.type = 'text'; $('cTokenToggle').textContent = '隐藏'; }
-  else { i.type = 'password'; $('cTokenToggle').textContent = '显示'; }
-};
-$('cToken').type = 'password';
+
+// 令牌管理
+$('btnAddToken').onclick = () => post('/api/tokens', {
+  action: 'add', label: $('tLabel').value.trim(), readonly: $('tReadonly').checked,
+}).then(() => { $('tLabel').value = ''; });
+$('btnRotate').onclick = () => post('/api/tokens', { action: 'rotate' });
+$('tokenList').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-act]');
+  if (!btn) return;
+  const act = btn.getAttribute('data-act');
+  const val = decodeURIComponent(btn.getAttribute('data-val'));
+  if (act === 'copy') {
+    try { await navigator.clipboard.writeText(val); toast('已复制令牌'); }
+    catch { toast('复制失败，请手动选择'); }
+  } else if (act === 'del') {
+    if (confirm('确定删除该令牌？使用该令牌的同伴将立即失去连接。')) {
+      post('/api/tokens', { action: 'remove', value: val });
+    }
+  }
+});
+
+// 主题切换（持久化到 localStorage）
+const themeBtn = $('btnTheme');
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  themeBtn.textContent = t === 'light' ? '☀️' : '🌙';
+  try { localStorage.setItem('fp-theme', t); } catch {}
+}
+let theme = 'dark';
+try { theme = localStorage.getItem('fp-theme') || 'dark'; } catch {}
+applyTheme(theme);
+themeBtn.onclick = () => applyTheme(
+  document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light'
+);
 
 document.querySelectorAll('.copy').forEach((el) => {
   el.onclick = async () => {

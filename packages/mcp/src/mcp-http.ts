@@ -6,6 +6,7 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/server';
 
 import { isAllowedHost } from './local-access.js';
+import type { TokenInfo, TokenRegistry } from './tokens.js';
 
 /**
  * Remote MCP over Streamable HTTP.
@@ -27,14 +28,15 @@ import { isAllowedHost } from './local-access.js';
  */
 
 export interface McpHttpDeps {
-  /** Builds a fresh McpServer — tools already filtered for read-only mode by the caller. */
-  createServer: () => McpServer;
+  /** Builds a fresh McpServer — tools already filtered for read-only mode by the caller. Accepts a
+   * per-connection read-only override so a token pinned read-only gets a read-only server. */
+  createServer: (readonlyOverride?: boolean) => McpServer;
   /**
-   * Shared secret. When set (LAN mode or a pinned FIGWRIGHT_TOKEN), every /mcp request must carry
-   * it as `x-figwright-token` or `Authorization: Bearer <token>`. Undefined on the default
+   * Token registry. When non-null (LAN mode or a pinned token), every /mcp request must carry a
+   * valid token as `x-figwright-token` or `Authorization: Bearer <token>`. `null` on the default
    * loopback bind, where the socket isn't network-reachable and the check is a no-op.
    */
-  token: string | undefined;
+  tokens: TokenRegistry | null;
   /**
    * Host the socket is bound to. When non-loopback (LAN mode) the loopback-only Host gate relaxes
    * to admit the bound LAN interface address — passed through to isAllowedHost.
@@ -46,18 +48,33 @@ export interface McpHttpDeps {
 
 const MCP_PATH = '/mcp';
 
-const tokenOk = (req: IncomingMessage, token: string | undefined): boolean => {
-  if (token === undefined) return true;
+const matchToken = (req: IncomingMessage, tokens: TokenRegistry | null): TokenInfo | null => {
+  if (tokens === null) return null;
   const header = req.headers['x-figwright-token'];
-  if (typeof header === 'string' && header === token) return true;
+  if (typeof header === 'string' && tokens.has(header)) return tokens.match(header, false);
   const auth = req.headers['authorization'];
   if (typeof auth === 'string' && auth.toLowerCase().startsWith('bearer ')) {
-    return auth.slice(7).trim() === token;
+    const bearer = auth.slice(7).trim();
+    if (tokens.has(bearer)) return tokens.match(bearer, false);
   }
-  return false;
+  return null;
 };
 
-const toWebRequest = (req: IncomingMessage, url: URL): Request => {
+/** Buffer the request body so we can both parse it for audit (tool name) and hand it to the Web
+ * Request — a stream can only be consumed once. GET/HEAD have no body, so they return undefined. */
+const readBodyBuffer = (req: IncomingMessage): Promise<Buffer | undefined> =>
+  new Promise(resolve => {
+    if (req.method === 'GET' || req.method === 'HEAD') {
+      resolve(undefined);
+      return;
+    }
+    const chunks: Buffer[] = [];
+    req.on('data', (c: Buffer) => chunks.push(c));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', () => resolve(undefined));
+  });
+
+const toWebRequest = (req: IncomingMessage, url: URL, bodyBuf?: Buffer): Request => {
   const headers = new Headers();
   for (const [key, value] of Object.entries(req.headers)) {
     if (value === undefined) continue;
@@ -67,9 +84,11 @@ const toWebRequest = (req: IncomingMessage, url: URL): Request => {
   // Node's Request requires `duplex: 'half'` when the body is a stream (browsers don't); without it
   // the constructor throws "duplex option is required when sending a body".
   const init: RequestInit & { duplex?: 'half' } = { method, headers };
-  // GET/HEAD have no body. For other methods hand the IncomingMessage stream to the Web Request.
+  // GET/HEAD have no body. For other methods hand the buffered body (or the stream) to the Web Request.
   if (method !== 'GET' && method !== 'HEAD') {
-    init.body = Readable.toWeb(req) as unknown as ReadableStream<Uint8Array>;
+    init.body = bodyBuf
+      ? Readable.from(bodyBuf) // resets cleanly per call
+      : (Readable.toWeb(req) as unknown as ReadableStream<Uint8Array>);
     init.duplex = 'half';
   }
   return new Request(url, init);
@@ -107,17 +126,19 @@ export const attachMcpHttp = (server: HttpServer, deps: McpHttpDeps): (() => voi
   // stream), which is all figwright needs and the simplest thing to bridge back to Node.
   const sessions = new Map<string, WebStandardStreamableHTTPServerTransport>();
 
-  const createSession = async (): Promise<WebStandardStreamableHTTPServerTransport> => {
+  const createSession = async (
+    readonly?: boolean,
+  ): Promise<WebStandardStreamableHTTPServerTransport> => {
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       enableJsonResponse: true,
     });
-    const mcp = deps.createServer();
+    const mcp = deps.createServer(readonly);
     await mcp.connect(transport);
     transport.onclose = () => {
       if (transport.sessionId) sessions.delete(transport.sessionId);
     };
-    log('[mcp-http] new session');
+    log(`[mcp-http] new session${readonly ? ' (read-only)' : ''}`);
     return transport;
   };
 
@@ -132,7 +153,9 @@ export const attachMcpHttp = (server: HttpServer, deps: McpHttpDeps): (() => voi
         res.end(JSON.stringify({ error: 'forbidden host' }));
         return;
       }
-      if (!tokenOk(req, deps.token)) {
+      // Authenticate against the token registry; null registry (loopback bind) means no token needed.
+      const info = matchToken(req, deps.tokens);
+      if (deps.tokens !== null && info === null) {
         writeUnauthorized(res);
         return;
       }
@@ -147,17 +170,44 @@ export const attachMcpHttp = (server: HttpServer, deps: McpHttpDeps): (() => voi
       if (typeof sessionId === 'string' && sessions.has(sessionId)) {
         transport = sessions.get(sessionId);
       } else {
-        transport = await createSession();
+        transport = await createSession(info?.readonly);
+      }
+
+      // Buffer the body once so we can both audit it (extract the tool name) and forward it.
+      const bodyBuf = await readBodyBuffer(req);
+      let toolName: string | undefined;
+      if (bodyBuf) {
+        try {
+          const rpc = JSON.parse(bodyBuf.toString('utf8'));
+          if (rpc && rpc.method === 'tools/call' && rpc.params && typeof rpc.params.name === 'string') {
+            toolName = rpc.params.name;
+          }
+        } catch {
+          /* not JSON-RPC we recognise — still forward it */
+        }
       }
 
       const url = new URL(reqUrl, `http://${req.headers.host ?? 'localhost'}`);
-      const webReq = toWebRequest(req, url);
+      const webReq = toWebRequest(req, url, bodyBuf);
+      const startedAt = Date.now();
       const webRes = await transport.handleRequest(webReq);
       // The session id is assigned during initialize; remember it so later requests reuse this session.
       if (transport.sessionId && !sessions.has(transport.sessionId)) {
         sessions.set(transport.sessionId, transport);
       }
       await writeWebResponse(res, webRes);
+
+      // Audit a real tool call (not initialize/ping): who, which tool, how long, success. The
+      // dashboard parses these `[audit]` lines into a live activity feed and per-tool counters.
+      if (toolName !== undefined) {
+        const durMs = Date.now() - startedAt;
+        const tokenLabel = info?.label ?? 'local';
+        const peerType = clientIp === '127.0.0.1' || clientIp === '::1' ? 'local-agent' : 'remote-agent';
+        log(
+          `[audit] tool_call peer=${peerType} ip=${clientIp} token=${tokenLabel} ` +
+            `tool=${toolName} ok=${webRes.ok} durMs=${durMs}`,
+        );
+      }
     } catch (err) {
       log(`[mcp-http] request error: ${(err as Error).message}`);
       if (!res.headersSent) {
