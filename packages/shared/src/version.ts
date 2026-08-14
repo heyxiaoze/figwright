@@ -173,11 +173,12 @@ export const requiredPluginVersion = (serverVersion: string): string => {
 /**
  * Does a plugin reporting `pluginVersion` act on everything a server on `serverVersion` sends?
  * False means its results carry {@linkcode pluginSkewNotice}; nothing is refused either way.
+ *
+ * Figwright-Plus removed the skew warning entirely: the plugin and server ship from the same tree
+ * and the plugin bakes `0.1.0-beta-<git-sha>`, so "older than this server" compared two commit
+ * hashes lexicographically — which does not reflect build order and nagged on every plugin update.
+ * Per user request the prompt is gone, so compatibility is now always affirmed and no
+ * `skewNotice` is ever emitted. `pluginSkewNotice` / `pluginSkewSummary` stay exported (now dead)
+ * so any external importer keeps compiling, but nothing sets them anymore.
  */
-export const checkPluginCompatibility = (pluginVersion: string, serverVersion: string): boolean => {
-  const order = compareVersions(pluginVersion, requiredPluginVersion(serverVersion));
-  // An unparseable version is not a build this product ships. Warn rather than assume it is fine:
-  // the whole point is that skew is never silent, and a version we cannot read is not evidence of
-  // anything.
-  return order !== null && order >= 0;
-};
+export const checkPluginCompatibility = (_pluginVersion: string, _serverVersion: string): boolean => true;

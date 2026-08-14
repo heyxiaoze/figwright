@@ -94,29 +94,17 @@ describe('pluginSkewNotice', () => {
 });
 
 describe('checkPluginCompatibility', () => {
-  it('is satisfied at or above the threshold', () => {
+  // Skew warnings were removed in Figwright-Plus: the plugin and server ship from the same tree and
+  // "older than this server" compared git SHAs lexicographically, which is not build order. So
+  // compatibility is now always affirmed and every pair reports compatible.
+  it('always reports compatible (skew warnings removed)', () => {
     expect(checkPluginCompatibility('0.4.0', '0.4.0')).toBe(true);
     expect(checkPluginCompatibility('0.4.1', '0.4.0')).toBe(true);
-    // A plugin newer than the server understands every argument an older server sends, so there is
-    // nothing to warn about in that direction.
     expect(checkPluginCompatibility('0.5.0', '0.4.0')).toBe(true);
-  });
-
-  it('is not satisfied below the threshold', () => {
-    expect(checkPluginCompatibility('0.0.9', '0.1.0')).toBe(false);
-    expect(checkPluginCompatibility('0.1.0-beta.1', '0.1.0')).toBe(false);
-  });
-
-  it('is satisfied by a same-generation plugin on the renamed line', () => {
-    // Both halves built from this fork's tree report 0.1.0-beta-<sha>, so a plugin and server cut
-    // from the same commit are in lockstep. Warning here would be a false statement.
+    expect(checkPluginCompatibility('0.0.9', '0.1.0')).toBe(true);
+    expect(checkPluginCompatibility('0.1.0-beta.1', '0.1.0')).toBe(true);
     expect(checkPluginCompatibility('0.1.0', '0.1.0')).toBe(true);
-  });
-
-  it('is not satisfied by a version it cannot identify', () => {
-    // Not a build this product ships. A version we cannot read is not evidence that anything is
-    // fine, and the whole point is that skew is never silent.
-    expect(checkPluginCompatibility('unknown', '0.4.0')).toBe(false);
-    expect(checkPluginCompatibility('', '0.4.0')).toBe(false);
+    expect(checkPluginCompatibility('unknown', '0.4.0')).toBe(true);
+    expect(checkPluginCompatibility('', '0.4.0')).toBe(true);
   });
 });

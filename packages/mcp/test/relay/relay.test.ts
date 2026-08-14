@@ -214,18 +214,16 @@ describe('Relay hello loop', () => {
 
     expect(res.kind).toBe('res');
     expect(b.relay.sessions.connected()).toHaveLength(1);
-    // Told on the handshake, so a plugin new enough to render it can, before any call is made.
+    // Skew warnings were removed: a below-floor plugin is still served, but no skewNotice is sent.
     const result = res.result as HelloResult;
-    expect(result.skewNotice).toMatch(/older than this server/i);
-    expect(result.skewNotice).toMatch(/silently ignored/i);
-    expect(result.skewNotice).toMatch(/Update the plugin/);
-    // And available per session, which is what a call attributes its result to.
+    expect(result.skewNotice).toBeUndefined();
+    // And per session, too.
     const [session] = b.relay.sessions.connected();
-    expect(b.relay.skewNotice(session?.id)).toMatch(/older than this server/i);
+    expect(b.relay.skewNotice(session?.id)).toBeNull();
     ws.close();
   });
 
-  it('serves a plugin whose version cannot be identified, and warns about it', async () => {
+  it('serves a plugin whose version cannot be identified, without a skew warning', async () => {
     const b = await startRelay();
     const ws = await connect(b.port);
     ws.send(
@@ -241,7 +239,7 @@ describe('Relay hello loop', () => {
     const res = decodeEnvelope(await nextMessage(ws)) as ResponseEnvelope;
 
     expect(res.kind).toBe('res');
-    expect((res.result as HelloResult).skewNotice).toMatch(/older than this server/i);
+    expect((res.result as HelloResult).skewNotice).toBeUndefined();
     ws.close();
   });
 
@@ -300,11 +298,11 @@ describe('Relay hello loop', () => {
       ),
     ]);
 
-    expect(seen.get('old')).toMatch(/older than this server/i);
+    expect(seen.get('old')).toBeNull();
     expect(seen.get('new')).toBeNull();
   });
 
-  it('explains the skew once, then keeps saying it in one line', async () => {
+  it('never emits a skew notice (skew warnings removed)', async () => {
     // The full text is ~120 tokens and the plugin cannot change under a session, so restating it on
     // every call of a fifty-call run spends thousands of tokens on one unchanging fact — and
     // identical text every turn is what teaches a model to skim past it.
@@ -327,17 +325,13 @@ describe('Relay hello loop', () => {
     const second = b.relay.skewNotice(sessionId);
     const third = b.relay.skewNotice(sessionId);
 
-    expect(first).toMatch(/releases\/latest/);
-    // Still says what it is and what it means — a caller seeing only this is not misinformed.
-    expect(second).toMatch(/older than this server/i);
-    expect(second).toMatch(/unverified/i);
-    expect(second).not.toMatch(/releases\/latest/);
-    expect(second?.length ?? 0).toBeLessThan((first?.length ?? 0) / 2);
-    expect(third).toBe(second);
+    expect(first).toBeNull();
+    expect(second).toBeNull();
+    expect(third).toBeNull();
     ws.close();
   });
 
-  it('attributes a timeout, which an old plugin can itself cause', async () => {
+  it('attributes a timeout to the serving plugin, without a skew notice', async () => {
     // The four ways a request ends were not attributed alike: resolve and error were, timeout was
     // not. It is not a bystander case — `get_design_context` arms its pre-serialization bail with
     // `budget`, an argument an old plugin drops, so a tree it would have refused up front is
@@ -365,7 +359,7 @@ describe('Relay hello loop', () => {
       }),
     ).rejects.toThrow(/timeout/i);
 
-    expect(attributed).toMatch(/older than this server/i);
+    expect(attributed).toBeNull();
     ws.close();
   });
 

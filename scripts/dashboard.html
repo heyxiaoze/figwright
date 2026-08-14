@@ -339,7 +339,13 @@ async function post(path, body) {
     body: JSON.stringify(body || {}),
   });
   const j = await r.json().catch(() => ({}));
-  toast(j.msg || (r.ok ? 'OK' : '失败'));
+  let msg = j.msg || (r.ok ? 'OK' : '失败');
+  // 404 通常意味着控制台进程是旧的（在加这个接口之前就启动的）：界面是最新的（每次请求重读磁盘），
+  // 但老进程没有该接口，于是静默失败。明确提示用户重启控制台。
+  if (!r.ok && r.status === 404) {
+    msg = '接口不存在：控制台进程可能过旧，请在终端重启「node scripts/dashboard.mjs」并硬刷新页面';
+  }
+  toast(msg);
   return j;
 }
 
