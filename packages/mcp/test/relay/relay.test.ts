@@ -21,7 +21,7 @@ import {
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 
-import { Relay } from '../../src/relay/relay.js';
+import { isRelayUpgradeAllowed, Relay } from '../../src/relay/relay.js';
 
 interface Bound {
   relay: Relay;
@@ -123,6 +123,20 @@ describe('Relay upgrade gating', () => {
     });
     expect(ws.readyState).toBe(WebSocket.OPEN);
     ws.close();
+  });
+});
+
+describe('Relay is loopback-only', () => {
+  it('admits an upgrade from a same-machine address', () => {
+    expect(isRelayUpgradeAllowed({ socket: { remoteAddress: '127.0.0.1' } })).toBe(true);
+    expect(isRelayUpgradeAllowed({ socket: { remoteAddress: '::1' } })).toBe(true);
+    expect(isRelayUpgradeAllowed({ socket: { remoteAddress: '::ffff:127.0.0.1' } })).toBe(true);
+  });
+
+  it('refuses an upgrade from any other machine on the network', () => {
+    expect(isRelayUpgradeAllowed({ socket: { remoteAddress: '192.168.1.5' } })).toBe(false);
+    expect(isRelayUpgradeAllowed({ socket: { remoteAddress: '10.0.0.2' } })).toBe(false);
+    expect(isRelayUpgradeAllowed({ socket: { remoteAddress: undefined } })).toBe(false);
   });
 });
 

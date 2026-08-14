@@ -127,7 +127,7 @@ if (LAN_MODE) {
 // own /rpc auth to the leader. null in loopback mode where no token is expected.
 const primaryToken = tokens?.primary()?.value;
 
-const node = new Node({ serverVersion: SERVER_VERSION, port: PORT, host: HOST, token: primaryToken, log });
+const node = new Node({ serverVersion: SERVER_VERSION, port: PORT, host: HOST, log });
 const follower = new Follower({ leaderUrl: node.leaderUrl, token: primaryToken, log });
 const election = new Election({ node, follower, buildId: BUILD_ID, log });
 

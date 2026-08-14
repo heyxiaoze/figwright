@@ -20,12 +20,6 @@ export interface NodeOptions {
   serverVersion: string;
   port?: number;
   host?: string;
-  /**
-   * Shared secret for LAN mode. When the relay binds a non-loopback host the loopback boundary is
-   * gone, so every plugin session (`/ws` upgrade + `$hello`) and every follower `/rpc` must carry
-   * this. Absent in the default loopback config. See relay.ts and local-access.ts.
-   */
-  token?: string | undefined;
   log?: (msg: string) => void;
 }
 
@@ -44,8 +38,7 @@ export const isAddressInUse = (err: unknown): boolean =>
 export class Node {
   private currentRole: NodeRole = NodeRole.Unknown;
   private leader: LeaderResources | null = null;
-  // token stays optional even after Required<...> — a loopback node has no LAN secret.
-  private readonly opts: Required<Omit<NodeOptions, 'token'>> & { token?: string | undefined };
+  private readonly opts: Required<NodeOptions>;
   private readonly listeners = new Set<(role: NodeRole) => void>();
 
   constructor(opts: NodeOptions) {
@@ -53,7 +46,6 @@ export class Node {
       serverVersion: opts.serverVersion,
       port: opts.port ?? DEFAULT_PORT,
       host: opts.host ?? '127.0.0.1',
-      token: opts.token,
       log: opts.log ?? (() => {}),
     };
   }
@@ -109,9 +101,9 @@ export class Node {
       serverVersion: this.opts.serverVersion,
       server: http,
       // bindHost tells the relay which host the socket is actually listening on, so it can relax the
-      // loopback-only Host header gate in LAN mode. token arms the upgrade + $hello auth checks.
+      // loopback-only Host header gate in LAN mode. The relay is loopback-only (plugins only) and
+      // needs no token; remote peers reach the server through /mcp (token-gated), not here.
       bindHost: this.opts.host,
-      token: this.opts.token,
       log: this.opts.log,
     });
     const port = (http.address() as AddressInfo).port;

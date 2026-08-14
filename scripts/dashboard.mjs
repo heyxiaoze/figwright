@@ -241,8 +241,8 @@ function buildGuide() {
   const token = primaryTokenOf(config);
   return {
     lanIp,
-    // 本地 Figma 插件用回环地址（同机），粘贴进「粘贴邀请」
-    invite: `figwright://connect?host=127.0.0.1&port=${port}&token=${encodeURIComponent(token)}`,
+    // 本地 Figma 插件用回环地址（同机），粘贴进「粘贴邀请」——插件走本地 relay，无需 token
+    invite: `figwright://connect?host=127.0.0.1&port=${port}`,
     // 远程 MCP 客户端（对方 VSCode/Cursor）：用 mcp-remote 走明文 http 桥接
     mcpRemote: `npx -y mcp-remote http://${lanIp}:${port}/mcp --allow-http --header "x-figwright-token: ${token}"`,
     // 或者 SSH 端口转发（更安全，且 VSCode 原生支持 localhost）
