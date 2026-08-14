@@ -12,7 +12,7 @@ pixel asset grounding can't encode.
   writes the **original** uploaded asset (no clip, crop, scale, gradient, or mask baked in) and reports
   each fill's `scaleMode` + intrinsic size, so you reproduce the display in CSS (`FILL`→`object-fit:
 cover`, `FIT`→`contain`) instead of shipping a pre-scaled, pre-clipped render. It dedupes a reused
-  asset to one file (named by hash) and handles a node carrying several image fills. Reach for
+  asset to one file (named `IMG-[parentLayer]-[layerName]`, with an imageHash fallback) and handles a node carrying several image fills. Reach for
   `save_screenshots` / `get_screenshot` `PNG` at **`scale: 2`** (the tool defaults to 1, which
   rasterizes at display size and ships blurry on dense screens) **only** when you specifically need
   the **composited** look — a `CROP` region, a mask, a gradient overlay you can't reproduce in CSS, or Figma image

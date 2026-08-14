@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Figwright LAN 控制台
+ * Figwright-Plus 控制台
  * ----------------------------------------------------------------------------
  * 一个零依赖的本地 Web 控制台（默认 http://127.0.0.1:3056），用来：
  *   1. 一键启动 / 停止 / 重启 figwright MCP server（LAN 模式）
@@ -73,15 +73,23 @@ function pushLog(line) {
   logLines.push(`[${ts}] ${line}`);
   if (logLines.length > 500) logLines.shift();
 
-  // 抓同伴 IP：[mcp-http] POST /mcp from 192.168.x.x
+  // 抓同伴连接：
+  //   1) HTTP MCP 远程客户端：[mcp-http] POST /mcp from 192.168.x.x
+  //   2) WebSocket relay 插件：[relay] session xxx hello (resumed=...)
+  let peerIp = null;
   const m = line.match(/\[mcp-http\][^\n]*from\s+([\d.a-fA-F:]+)/);
   if (m) {
-    const ip = m[1];
+    peerIp = m[1];
+  } else if (line.match(/\[relay\]\s+session\s+\S+\s+hello/)) {
+    // WS relay 连接没有 IP（同机 loopback），用 "plugin (local)" 标识
+    peerIp = 'plugin (local)';
+  }
+  if (peerIp) {
     const now = Date.now();
-    const prev = peers.get(ip) || { firstSeen: now, count: 0 };
+    const prev = peers.get(peerIp) || { firstSeen: now, count: 0 };
     prev.lastSeen = now;
     prev.count += 1;
-    peers.set(ip, prev);
+    peers.set(peerIp, prev);
   }
 }
 
@@ -330,7 +338,7 @@ process.on('exit', () => {
 
 server.listen(DASH_PORT, '127.0.0.1', () => {
   const open = !process.argv.includes('--no-open');
-  console.log(`\n  Figwright LAN 控制台已启动: http://127.0.0.1:${DASH_PORT}`);
+  console.log(`\n  Figwright-Plus 控制台已启动: http://127.0.0.1:${DASH_PORT}`);
   console.log(`  配置文件: ${CONFIG_PATH}`);
   console.log(`  自动拉起 figwright MCP server ...\n`);
   startServer();

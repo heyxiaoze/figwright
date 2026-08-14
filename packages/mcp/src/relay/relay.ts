@@ -26,6 +26,18 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { isAllowedHost, isAllowedWsOrigin } from '../local-access.js';
 import { DEFAULT_DISCONNECT_GRACE_MS, type Session, SessionManager } from './session.js';
 
+/**
+ * True when the socket's peer is this machine itself. A same-machine plugin (Figma on the same Mac
+ * as the server, addressing it via 127.0.0.1/::1) is the user, so in LAN mode it is exempt from the
+ * shared-token gate — loopback stays a trusted boundary even when the socket is also reachable from
+ * the LAN. Remote peers (a different machine on the network) still must present the token.
+ */
+const isLoopbackAddress = (addr: string | undefined): boolean => {
+  if (addr === undefined) return false;
+  const a = addr.toLowerCase();
+  return a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1' || a === 'localhost';
+};
+
 export interface RelayOptions {
   serverVersion: string;
   server: HttpServer;
@@ -98,11 +110,13 @@ export class Relay {
           done(false, 403, 'Forbidden');
           return;
         }
-        // LAN mode: the loopback boundary is gone, so a shared token is the only thing standing
-        // between the relay and any machine on the network. The plugin offers it as a WebSocket
-        // subprotocol; a peer that doesn't name it (a stray LAN client, a probe) is refused here,
-        // before it can even send $hello. Loopback mode sets no token and skips this entirely.
-        if (this.opts.token !== undefined) {
+        // LAN mode: the loopback boundary is gone for *remote* peers, so a shared token is the only
+        // thing standing between the relay and any other machine on the network. The plugin offers it
+        // as a WebSocket subprotocol; a remote peer that doesn't name it (a stray LAN client, a probe)
+        // is refused here, before it can even send $hello. A same-machine peer (loopback address) is
+        // the user and stays exempt — loopback is always trusted, even in LAN mode. Loopback-mode
+        // configs set no token and skip this entirely.
+        if (this.opts.token !== undefined && !isLoopbackAddress(req.socket.remoteAddress)) {
           const offered = (req.headers['sec-websocket-protocol'] ?? '')
             .split(',')
             .map(s => s.trim());
@@ -401,11 +415,16 @@ export class Relay {
       return null;
     }
 
-    // LAN mode: the WebSocket upgrade already required the token as a subprotocol, but a peer that
-    // replays a captured upgrade or reaches us through a path that skipped it must still be turned
-    // away at the handshake. Re-checking here — where we can return a clear error to the panel —
-    // is defence in depth, and the only gate for any transport that doesn't carry subprotocols.
-    if (this.opts.token !== undefined && parsed.data.token !== this.opts.token) {
+    // LAN mode: the WebSocket upgrade already required the token as a subprotocol (for remote peers;
+    // loopback peers are exempt), but a peer that replays a captured upgrade or reaches us through a
+    // path that skipped it must still be turned away at the handshake. Re-checking here — where we can
+    // return a clear error to the panel — is defence in depth, and the only gate for any transport
+    // that doesn't carry subprotocols. Same-machine loopback peers stay exempt.
+    if (
+      this.opts.token !== undefined &&
+      !isLoopbackAddress(socket.remoteAddress) &&
+      parsed.data.token !== this.opts.token
+    ) {
       const message =
         'LAN token missing or incorrect — set the same token in the plugin connection settings';
       this.opts.log(`[relay] rejecting plugin — ${message}`);

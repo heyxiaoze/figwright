@@ -108,7 +108,8 @@ describe('writeImageFills', () => {
               index: 0,
               imageHash: 'abcHASH',
               format: 'PNG',
-              path: join(dir, 'abcHASH.png'),
+              path: join(dir, 'abchash.png'),
+              relativePath: 'abchash.png',
               width: 200,
               height: 100,
               scaleMode: 'FILL',
@@ -117,15 +118,16 @@ describe('writeImageFills', () => {
               index: 2,
               imageHash: 'jpgHASH',
               format: 'JPG',
-              path: join(dir, 'jpgHASH.jpg'),
+              path: join(dir, 'jpghash.jpg'),
+              relativePath: 'jpghash.jpg',
               scaleMode: 'CROP',
             },
           ],
         },
       ],
     } satisfies SaveImageFillsResult);
-    expect((await readFile(join(dir, 'abcHASH.png'))).toString('base64')).toBe(PNG_B64);
-    expect((await readFile(join(dir, 'jpgHASH.jpg'))).toString('base64')).toBe(JPG_B64);
+    expect((await readFile(join(dir, 'abchash.png'))).toString('base64')).toBe(PNG_B64);
+    expect((await readFile(join(dir, 'jpghash.jpg'))).toString('base64')).toBe(JPG_B64);
   });
 
   it('dedupes a shared imageHash to one file while every usage still maps to it', async () => {
@@ -144,6 +146,8 @@ describe('writeImageFills', () => {
     const shared = join(dir, 'logo.png');
     expect(result.nodes[0]?.images[0]?.path).toBe(shared);
     expect(result.nodes[1]?.images[0]?.path).toBe(shared);
+    expect(result.nodes[0]?.images[0]?.relativePath).toBe('logo.png');
+    expect(result.nodes[1]?.images[0]?.relativePath).toBe('logo.png');
     expect((await readFile(shared)).toString('base64')).toBe(PNG_B64);
   });
 
@@ -159,11 +163,97 @@ describe('writeImageFills', () => {
       index: 0,
       imageHash: 'gone',
       path: null,
+      relativePath: null,
       scaleMode: 'FILL',
     });
-    expect(result.nodes[1]?.images[0]).toEqual({ index: 1, imageHash: null, path: null });
+    expect(result.nodes[1]?.images[0]).toEqual({
+      index: 1,
+      imageHash: null,
+      path: null,
+      relativePath: null,
+    });
     expect(result.nodes[2]).toEqual({ nodeId: '3:3', images: [], mixed: true });
     await expect(readFile(join(dir, 'gone.png'))).rejects.toThrow(/ENOENT/);
+  });
+
+  it('names files as IMG-[location]-[name] from the parent + layer name', async () => {
+    const dir = await makeDir();
+    const nodes: NodeImageFills[] = [
+      {
+        nodeId: '1:1',
+        parentName: 'Blog-1',
+        nodeName: 'Cover',
+        images: [{ index: 0, imageHash: 'h', base64: PNG_B64, scaleMode: 'FILL' }],
+      },
+    ];
+    const result = await writeImageFills(dir, nodes);
+    const expected = join(dir, 'IMG-blog-1-cover.png');
+    expect(result.nodes[0]?.nodeName).toBe('Cover');
+    expect(result.nodes[0]?.parentName).toBe('Blog-1');
+    expect(result.nodes[0]?.images[0]?.path).toBe(expected);
+    expect(result.nodes[0]?.images[0]?.relativePath).toBe('IMG-blog-1-cover.png');
+    expect((await readFile(expected)).toString('base64')).toBe(PNG_B64);
+  });
+
+  it('falls back to IMG-[name] when there is no parent layer name', async () => {
+    const dir = await makeDir();
+    const nodes: NodeImageFills[] = [
+      {
+        nodeId: '1:1',
+        nodeName: 'Hero Photo',
+        images: [{ index: 0, imageHash: 'h', base64: PNG_B64 }],
+      },
+    ];
+    const result = await writeImageFills(dir, nodes);
+    expect(result.nodes[0]?.images[0]?.path).toBe(join(dir, 'IMG-hero-photo.png'));
+    expect(result.nodes[0]?.images[0]?.relativePath).toBe('IMG-hero-photo.png');
+  });
+
+  it('appends the fill index only when a node has multiple image fills', async () => {
+    const dir = await makeDir();
+    const nodes: NodeImageFills[] = [
+      {
+        nodeId: '1:1',
+        nodeName: 'Banner',
+        images: [
+          { index: 0, imageHash: 'a', base64: PNG_B64 },
+          { index: 3, imageHash: 'b', base64: JPG_B64 },
+        ],
+      },
+    ];
+    const result = await writeImageFills(dir, nodes);
+    expect(result.nodes[0]?.images[0]?.path).toBe(join(dir, 'IMG-banner-0.png'));
+    expect(result.nodes[0]?.images[1]?.path).toBe(join(dir, 'IMG-banner-3.jpg'));
+    expect(result.nodes[0]?.images[0]?.relativePath).toBe('IMG-banner-0.png');
+    expect(result.nodes[0]?.images[1]?.relativePath).toBe('IMG-banner-3.jpg');
+  });
+
+  it('dedupes by hash and names the shared file after the first node that referenced it', async () => {
+    const dir = await makeDir();
+    const nodes: NodeImageFills[] = [
+      { nodeId: '1:1', nodeName: 'Logo', images: [{ index: 0, imageHash: 'logo', base64: PNG_B64 }] },
+      { nodeId: '2:2', nodeName: 'Brand', images: [{ index: 0, imageHash: 'logo', base64: PNG_B64 }] },
+    ];
+    const result = await writeImageFills(dir, nodes);
+    const shared = join(dir, 'IMG-logo.png');
+    expect(result.nodes[0]?.images[0]?.path).toBe(shared);
+    expect(result.nodes[1]?.images[0]?.path).toBe(shared);
+    expect(result.nodes[0]?.images[0]?.relativePath).toBe('IMG-logo.png');
+    expect((await readFile(shared)).toString('base64')).toBe(PNG_B64);
+  });
+
+  it('falls back to the hash name when two different images sanitize to the same path', async () => {
+    const dir = await makeDir();
+    const nodes: NodeImageFills[] = [
+      { nodeId: '1:1', nodeName: 'Pic', images: [{ index: 0, imageHash: 'aaa', base64: PNG_B64 }] },
+      { nodeId: '2:2', nodeName: 'Pic', images: [{ index: 0, imageHash: 'bbb', base64: PNG_B64 }] },
+    ];
+    const result = await writeImageFills(dir, nodes);
+    expect(result.nodes[0]?.images[0]?.path).toBe(join(dir, 'IMG-pic.png'));
+    expect(result.nodes[0]?.images[0]?.relativePath).toBe('IMG-pic.png');
+    // Second "Pic" (same name + extension, different hash) collides → hash-named fallback.
+    expect(result.nodes[1]?.images[0]?.path).toBe(join(dir, 'bbb-0.png'));
+    expect(result.nodes[1]?.images[0]?.relativePath).toBe('bbb-0.png');
   });
 });
 
@@ -189,6 +279,7 @@ describe('handleSaveImageFills', () => {
       imageHash: 'h',
       format: 'PNG',
       path: join(dir, 'h.png'),
+      relativePath: 'h.png',
     });
     expect((await readFile(join(dir, 'h.png'))).toString('base64')).toBe(PNG_B64);
   });

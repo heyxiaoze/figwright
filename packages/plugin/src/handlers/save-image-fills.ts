@@ -54,7 +54,14 @@ export const createSaveImageFillsHandler =
 
         const fills = (node as unknown as { fills: readonly Paint[] | typeof figma.mixed }).fills;
         // Mixed fills (per-text-range) can't be indexed as an array — flag rather than crash.
-        if (fills === figmaCtx.mixed) return { nodeId, images: [], mixed: true };
+        if (fills === figmaCtx.mixed)
+          return {
+            nodeId,
+            nodeName: node.name,
+            parentName: node.parent?.name ?? undefined,
+            images: [],
+            mixed: true,
+          };
 
         // Fetch every fill's bytes in parallel (shared hashes still resolve once via the memoized
         // cache), then drop the non-image paints — keeps fill order without an await in a loop.
@@ -77,7 +84,7 @@ export const createSaveImageFillsHandler =
           }),
         );
         const images = entries.filter((e): e is ImageFillBytes => e !== null);
-        return { nodeId, images };
+        return { nodeId, nodeName: node.name, parentName: node.parent?.name ?? undefined, images };
       }),
     );
 

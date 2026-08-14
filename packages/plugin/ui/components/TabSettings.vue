@@ -51,10 +51,14 @@ const portError = computed(() => {
 
 const tokenMissing = computed(() => isLan.value && form.token.trim() === '');
 
-const canSave = computed(() => !portError.value && !tokenMissing.value);
+// A bad port is the only thing that should block saving — a missing token is a warning, not a hard
+// stop (loopback never needs one, and a LAN connection that lacks it simply fails the handshake with
+// a clear message). Previously `tokenMissing` disabled the button, which left it greyed-out and
+// unclickable even on loopback, where no token is required.
+const canSave = computed(() => !portError.value);
 
 const onSave = (): void => {
-  if (!canSave.value) return;
+  if (portError.value) return;
   props.save({ host: form.host.trim(), port: Number(form.port), token: form.token });
 };
 
@@ -82,6 +86,8 @@ const applyInvite = (): void => {
   form.token = parsed.token;
   inviteError.value = null;
   inviteRaw.value = '';
+  // Auto-save and reconnect so the user doesn't have to click "Save & reconnect" separately.
+  onSave();
 };
 
 // --- Clipboard feedback ----------------------------------------------------------------------
@@ -288,7 +294,12 @@ onBeforeUnmount(() => {
       <button
         type="button"
         :disabled="!canSave"
-        class="rounded-md bg-brand px-3 py-1.5 text-panel font-medium text-bg transition-opacity disabled:opacity-40"
+        class="save-btn rounded-md px-3 py-1.5 text-panel font-medium transition-all duration-150"
+        :class="[
+          canSave
+            ? 'bg-brand text-bg hover:bg-brand/90 active:scale-[0.97] active:bg-brand/80 cursor-pointer'
+            : 'bg-raised text-dim/40 border border-line cursor-not-allowed',
+        ]"
         @click="onSave"
       >
         Save &amp; reconnect

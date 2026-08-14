@@ -21,7 +21,7 @@
   --color-fg: var(--figma-color-text, #ffffff);
   --color-dim: var(--figma-color-text-secondary, #a0a0a0);
   --color-faint: var(--figma-color-text-tertiary, #7d7d7d);
-  --color-brand: var(--figma-color-text-brand, #18a0fb);
+  --color-brand: #5956e9;
   --color-danger: var(--figma-color-text-danger, #f24822);
   --color-success: var(--figma-color-text-success, #14ae5c);
   --color-warning: var(--figma-color-text-warning, #e5a400);

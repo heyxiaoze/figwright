@@ -53,7 +53,11 @@
  * keeps the warning meaningful: a plugin one patch behind a server that changed no arguments is
  * fine, and crying wolf there would teach an agent to discount the warning that matters.
  */
-export const MIN_PLUGIN_VERSION = '0.4.0';
+// Forked as Figwright-Plus at version 0.1.x; the plugin and server are built and shipped together
+// from this tree, so the compatibility floor is the renamed line's base — not the upstream 0.4.0
+// this fork branched from. A higher value would flag every Figwright-Plus plugin as "predates the
+// server" and mark all results unverified.
+export const MIN_PLUGIN_VERSION = '0.1.0';
 
 const parse = (version: string): { core: [number, number, number]; pre: string | null } | null => {
   const match = /^(\d+)\.(\d+)\.(\d+)(?:-([\w.-]+))?(?:\+[\w.-]+)?$/.exec(version);
@@ -125,8 +129,8 @@ export const compareVersions = (a: string, b: string): number | null => {
 export const pluginSkewNotice = (pluginVersion: string, serverVersion: string): string =>
   `${pluginSkewSummary(pluginVersion, serverVersion)} ` +
   'Arguments added after it was built are silently ignored, which is why nothing in the result ' +
-  'itself looks wrong. Update the plugin: download the latest release from ' +
-  'https://github.com/awdr74100/figwright/releases/latest and re-import it in Figma ' +
+  'itself looks wrong. Update the plugin: download the latest Figwright-Plus release from ' +
+  'https://github.com/heyxiaoze/figwright/releases/latest and re-import it in Figma ' +
   '(Plugins → Development → Import plugin from manifest).';
 
 /**

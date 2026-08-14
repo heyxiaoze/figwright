@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 
 import type {
   ImageFillsResult,
@@ -27,14 +27,19 @@ export const saveImageFillsTool: ToolSpec = {
     "Extract the ORIGINAL image bytes behind each node's IMAGE fills and write them to disk under " +
     'outDir — the source asset exactly as uploaded (no mask, clip, crop, scale, or effects applied), ' +
     'unlike save_screenshots / get_screenshot which re-render the composited node. Returns ' +
-    '{ nodes: [{ nodeId, images: [{ index, imageHash, format, path, width?, height?, scaleMode? }], ' +
-    'mixed? }] }. index is the fill position in node.fills; width/height are the image intrinsic size; ' +
+    '{ nodes: [{ nodeId, nodeName?, parentName?, images: [{ index, imageHash, format, path, relativePath?, width?, height?, scaleMode? }], ' +
+    'mixed? }] }. File names are lowercased and restricted to [a-z0-9-] (spaces and any other ' +
+    'character collapse to a single hyphen). Files follow the structured convention `IMG-[location]-[name][-index].[ext]` where ' +
+    'location is the parent Figma layer (parentName) and name is this layer (nodeName) — e.g. ' +
+    '`IMG-Blog-1-Cover.png` or `IMG-Blog-1-Gallery-3.jpg`. With no parent it falls back to `IMG-[name]`, ' +
+    'and with a missing/colliding name it falls back to the imageHash, so identical images (same ' +
+    'imageHash reused across nodes) still share one file. index is added only with multiple image ' +
+    'fills and is the paint position in node.fills; width/height are the image intrinsic size; ' +
     'scaleMode is how the fill is displayed (FILL / FIT / CROP / TILE); format is sniffed from the ' +
-    'bytes (PNG / JPG / GIF / WEBP, or BIN if unrecognized). Identical images (same imageHash reused ' +
-    'across nodes) are fetched once and share one file named by hash. path is null when the fill image ' +
-    "can't be resolved; images:[] means the node has no image fill; mixed:true means the node's fills " +
-    'are per-text-range and were not enumerated. For a rendered/composited raster use save_screenshots; ' +
-    'for a vector node use export_pdf.',
+    'bytes (PNG / JPG / GIF / WEBP, or BIN if unrecognized). path (and relativePath) is null when the ' +
+    'fill image cannot be resolved; images:[] means the ' +
+    'node has no image fill; mixed:true means the node fills are per-text-range and were not ' +
+    'enumerated. For a rendered/composited raster use save_screenshots; for a vector node use export_pdf.',
   inputSchema,
   kind: 'local',
 };
@@ -72,8 +77,20 @@ export const detectImageFormat = (bytes: Buffer): { format: string; ext: string 
   return { format: 'BIN', ext: 'bin' };
 };
 
-/** Map a Figma image hash to a filesystem-safe basename, blocking path traversal. */
-const sanitize = (hash: string): string => hash.replace(/[^\w.-]/g, '-');
+/**
+ * Map a name to a filesystem-safe basename: lowercase, only [a-z0-9-] survive, any other character
+ * (spaces, punctuation, non-ASCII) collapses to a single hyphen, runs of hyphens are merged, and
+ * leading/trailing hyphens are trimmed. An empty result falls back to 'image'.
+ */
+const sanitize = (name: string): string => {
+  const cleaned = name
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 120);
+  return cleaned.length > 0 ? cleaned : 'image';
+};
 
 /** Carry the identifying/display fields through from the plugin result to the write result. */
 const carry = (img: NodeImageFills['images'][number]): Omit<SavedImageFill, 'format' | 'path'> => ({
@@ -85,10 +102,14 @@ const carry = (img: NodeImageFills['images'][number]): Omit<SavedImageFill, 'for
 });
 
 /**
- * Decode the base64 image bytes into files under outDir (created if missing). Files are named by
- * imageHash so an asset reused across many nodes is written exactly once; every usage still gets
- * its own result entry pointing at the shared path. Pure-fs and dispatch-free so it can be
- * unit-tested against a temp directory.
+ * Decode the base64 image bytes into files under outDir (created if missing). Files follow the
+ * structured convention `IMG-[location]-[name][-index]` (location = parent layer, name = this
+ * layer) so the export self-describes where the asset lives and what it depicts; with no parent it
+ * falls back to `IMG-[name]`, and with a missing/colliding name it falls back to the imageHash as a
+ * guaranteed-unique label. Identical images (same imageHash reused across nodes) are written exactly
+ * once and named after the FIRST node that referenced them; every usage still gets its own result
+ * entry pointing at the shared path. Pure-fs and dispatch-free so it can be unit-tested against a
+ * temp directory.
  */
 export const writeImageFills = async (
   outDir: string,
@@ -97,19 +118,57 @@ export const writeImageFills = async (
   const dir = resolve(outDir);
   await mkdir(dir, { recursive: true });
 
-  // Dedup writes by path: a hash reused across nodes maps to one file written once. Build the whole
-  // result (and the unique write set) first, then flush the files in parallel — no await in a loop.
+  // Dedup writes by imageHash: a hash reused across nodes maps to one file written once. Track the
+  // occupied paths so a different hash that sanitizes to the same name cleanly falls back to the hash.
   const toWrite = new Map<string, Buffer>();
+  const hashToPath = new Map<string, { path: string; format: string }>();
+  const occupied = new Set<string>();
+
   const outNodes: SavedNodeImageFills[] = nodes.map(node => {
+    const multi = node.images.length > 1;
     const images: SavedImageFill[] = node.images.map(img => {
-      if (img.base64 === null || img.imageHash === null) return { ...carry(img), path: null };
+      if (img.base64 === null || img.imageHash === null)
+        return { ...carry(img), path: null, relativePath: null };
+
+      const existing = hashToPath.get(img.imageHash);
+      if (existing !== undefined)
+        return {
+          ...carry(img),
+          format: existing.format,
+          path: existing.path,
+          relativePath: relative(dir, existing.path),
+        };
+
       const buf = Buffer.from(img.base64, 'base64');
       const { format, ext } = detectImageFormat(buf);
-      const path = join(dir, `${sanitize(img.imageHash)}.${ext}`);
-      if (!toWrite.has(path)) toWrite.set(path, buf);
-      return { ...carry(img), format, path };
+      // Structured name: IMG-[location]-[name] where location = parent layer, name = this layer.
+      // Falls back to IMG-[name] when there's no parent, then to the bare imageHash when the name is
+      // absent too. The index suffix is added only when the node has multiple image fills.
+      const loc = node.parentName?.trim();
+      const name = node.nodeName?.trim();
+      let base: string;
+      if (loc && name) base = `IMG-${sanitize(loc)}-${sanitize(name)}`;
+      else if (name) base = `IMG-${sanitize(name)}`;
+      else base = sanitize(img.imageHash);
+      const structured = loc !== undefined || name !== undefined;
+      const suffix = structured && multi ? `-${img.index}` : '';
+      let candidate = join(dir, `${base}${suffix}.${ext}`);
+      let guard = 0;
+      while (occupied.has(candidate)) {
+        candidate = join(dir, `${sanitize(img.imageHash)}-${guard++}.${ext}`);
+      }
+      occupied.add(candidate);
+      hashToPath.set(img.imageHash, { path: candidate, format });
+      toWrite.set(candidate, buf);
+      return { ...carry(img), format, path: candidate, relativePath: relative(dir, candidate) };
     });
-    return { nodeId: node.nodeId, images, ...(node.mixed === true ? { mixed: true } : {}) };
+    return {
+      nodeId: node.nodeId,
+      images,
+      ...(node.nodeName !== undefined ? { nodeName: node.nodeName } : {}),
+      ...(node.parentName !== undefined ? { parentName: node.parentName } : {}),
+      ...(node.mixed === true ? { mixed: true } : {}),
+    };
   });
 
   await Promise.all([...toWrite].map(([path, buf]) => writeFile(path, buf)));

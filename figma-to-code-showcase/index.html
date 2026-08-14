@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>figwright · figma→code 能力清单</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #161a21;
+    --panel-2: #1c212b;
+    --border: #2a313d;
+    --text: #e6e9ef;
+    --muted: #9aa4b2;
+    --accent: #6c8cff;
+    --accent-2: #4fd1c5;
+    --warn: #f6c177;
+    --code: #ffd479;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 32px 20px 80px;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  header.hero {
+    border: 1px solid var(--border);
+    background: linear-gradient(135deg, #1a2030, #141821);
+    border-radius: 16px;
+    padding: 28px 32px;
+    margin-bottom: 28px;
+  }
+  header.hero h1 { margin: 0 0 6px; font-size: 26px; letter-spacing: .3px; }
+  header.hero .sub { color: var(--muted); font-size: 14px; }
+  .badge {
+    display: inline-block; font-size: 12px; padding: 3px 10px; border-radius: 999px;
+    background: rgba(108,140,255,.15); color: var(--accent); border: 1px solid rgba(108,140,255,.3);
+    margin-right: 8px;
+  }
+  .note {
+    border-left: 3px solid var(--warn);
+    background: rgba(246,193,119,.08);
+    padding: 10px 16px; border-radius: 8px; color: #f3d49a; font-size: 13.5px; margin: 18px 0 28px;
+  }
+  section { margin-bottom: 30px; }
+  section h2 {
+    font-size: 18px; margin: 0 0 4px; display: flex; align-items: center; gap: 10px;
+  }
+  section h2 .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 8px; font-size: 13px; font-weight: 700;
+    background: var(--accent); color: #0b0e14;
+  }
+  section .desc { color: var(--muted); font-size: 13px; margin: 0 0 12px 36px; }
+  table {
+    width: 100%; border-collapse: collapse; font-size: 14px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+  }
+  thead th {
+    text-align: left; background: var(--panel-2); color: var(--muted);
+    font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .5px;
+    padding: 11px 16px; border-bottom: 1px solid var(--border);
+  }
+  tbody td { padding: 11px 16px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: rgba(108,140,255,.06); }
+  td.tool { white-space: nowrap; }
+  code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    background: rgba(255,212,121,.12); color: var(--code); padding: 2px 7px; border-radius: 6px; font-size: 12.5px;
+  }
+  .tag {
+    display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 6px; margin-left: 6px;
+    background: rgba(79,209,197,.14); color: var(--accent-2); border: 1px solid rgba(79,209,197,.3);
+  }
+  .footer { color: var(--muted); font-size: 12.5px; text-align: center; margin-top: 40px; }
+  .flow {
+    display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 24px 0; align-items: center;
+  }
+  .flow .step {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 14px; font-size: 13px;
+  }
+  .flow .arrow { color: var(--muted); font-size: 18px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div style="margin-bottom:10px">
+      <span class="badge">figwright fork</span>
+      <span class="badge">figma → code</span>
+      <span class="badge">能力清单</span>
+    </div>
+    <h1>figma → code 工具能力清单</h1>
+    <div class="sub">基于 figwright codegen 工作流整理 · 只读模式下全部可用 · 当前分支 feature-enhance</div>
+  </header>
+
+  <div class="note">
+    ⚠️ 当前 MCP 服务运行在 <strong>只读模式</strong>（<code>FIGWRIGHT_READONLY=true</code>），下列「读取 / 导出 / 本地分析」类工具全部可用；code→figma 的 60+ 写回工具已被隐藏。此清单仅覆盖 figma→code 方向。
+  </div>
+
+  <div class="flow">
+    <div class="step">① <code>get_design_context</code> 采结构</div>
+    <span class="arrow">→</span>
+    <div class="step">② <code>component_map</code> + <code>token_map</code> 找复用</div>
+    <span class="arrow">→</span>
+    <div class="step">③ <code>design_diff</code> 管同步</div>
+    <span class="arrow">→</span>
+    <div class="step">④ 导出图片/图标</div>
+  </div>
+
+  <!-- ① -->
+  <section>
+    <h2><span class="num">1</span>核心：结构采样（一切的源）</h2>
+    <p class="desc">codegen 唯一真相源。把节点序列化为「结构 + 样式 + Token 名字 + 组件属性」。</p>
+    <table>
+      <thead><tr><th style="width:34%">工具</th><th>作用</th></tr></thead>
+      <tbody>
+        <tr><td class="tool"><code>get_design_context</code></td><td>主干工具。支持 <code>detail: full/minimal</code>、<code>dedupeComponents</code>（重复组件折叠）、超大设计自动回 <code>sectionPlan</code>（分段列表）分批采样。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ② -->
+  <section>
+    <h2><span class="num">2</span>辅助读取：定位 / 筛选要采样的节点</h2>
+    <p class="desc">在采样前找到「采哪里」，以及读设计元信息、标注、字体等。</p>
+    <table>
+      <thead><tr><th style="width:34%">工具</th><th>作用</th></tr></thead>
+      <tbody>
+        <tr><td class="tool"><code>get_selection</code></td><td>取当前 Figma 选中的节点。</td></tr>
+        <tr><td class="tool"><code>get_node</code> / <code>get_nodes_info</code></td><td>按 id 取单节点 / 批量取节点信息。</td></tr>
+        <tr><td class="tool"><code>get_document</code> / <code>get_pages</code></td><td>整棵树 / 页面列表（找顶层 section 用）。</td></tr>
+        <tr><td class="tool"><code>search_nodes</code></td><td>按条件搜索节点。</td></tr>
+        <tr><td class="tool"><code>scan_text_nodes</code></td><td>扫描所有文字节点。</td></tr>
+        <tr><td class="tool"><code>scan_nodes_by_types</code></td><td>按类型遍历（批量导出图片前用它枚举含图节点）。</td></tr>
+        <tr><td class="tool"><code>get_metadata</code> / <code>get_viewport</code></td><td>文档元信息 / 当前视口（响应式断点参考）。</td></tr>
+        <tr><td class="tool"><code>get_fonts</code> / <code>get_annotations</code></td><td>字体清单 / Dev Mode 标注（设计师给你的注释，最高优先级）。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ③ -->
+  <section>
+    <h2><span class="num">3</span>复用判定：避免从头造组件 / Token</h2>
+    <p class="desc">把 Figma 的组件与变量对接到项目已有的代码组件与设计 Token，命中即复用。</p>
+    <table>
+      <thead><tr><th style="width:34%">工具</th><th>作用</th></tr></thead>
+      <tbody>
+        <tr><td class="tool"><code>component_map</code></td><td>Figma 组件 → 项目已有代码组件，给 <code>high/medium/low/unmapped</code> 状态 + 候选路径。命中即 import 复用，别重写。</td></tr>
+        <tr><td class="tool"><code>token_map</code></td><td>Figma 变量 / 颜色样式 → 项目 Token，给状态 + <code>ref</code>。命中即引 ref，别写死 hex。</td></tr>
+        <tr><td class="tool"><code>get_component_api</code></td><td>取组件完整属性 API（所有 VARIANT / BOOLEAN / TEXT 选项），写组件自身定义时用。</td></tr>
+        <tr><td class="tool"><code>get_local_components</code></td><td>本地组件库清单（上面两张 map 的底层数据）。</td></tr>
+        <tr><td class="tool"><code>get_styles</code></td><td>共享样式清单（颜色/文字/效果样式）。</td></tr>
+        <tr><td class="tool"><code>get_variable_defs</code></td><td>变量定义（Design Token 源）。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ④ -->
+  <section>
+    <h2><span class="num">4</span>资源导出：grounding 带不动的像素 / 矢量</h2>
+    <p class="desc">几何 + 文字采样没有像素，logo / 照片 / 图标必须显式导出，否则渲染成灰块。</p>
+    <table>
+      <thead><tr><th style="width:34%">工具</th><th>作用</th></tr></thead>
+      <tbody>
+        <tr><td class="tool"><code>save_image_fills</code></td><td>掏 <strong>原始图片字节</strong>（照片 / 产品图），按 hash 去重，带 <code>scaleMode</code> + 原尺寸，方便 CSS 还原。</td></tr>
+        <tr><td class="tool"><code>icon_map</code></td><td>图标优先 <strong>复用</strong> 项目已有 <code>.svg</code>（lucide / heroicons / iconify 也可引），实在没有才现导。</td></tr>
+        <tr><td class="tool"><code>get_screenshot</code></td><td>拍照：<code>PNG</code>（合成，带裁剪遮罩调色，<code>scale:2</code> 才不糊）/ <code>SVG</code>（矢量兜底）。</td></tr>
+        <tr><td class="tool"><code>save_screenshots</code></td><td>批量把截图落盘（server 侧写文件）。</td></tr>
+        <tr><td class="tool"><code>export_pdf</code> / <code>export_video</code></td><td>导出 PDF / 视频。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ⑤ -->
+  <section>
+    <h2><span class="num">5</span>服务端本地分析：增量维护（不碰文档）</h2>
+    <p class="desc">纯辅助探针，跑在 server 本地，对 Figma 文档无任何改动。</p>
+    <table>
+      <thead><tr><th style="width:34%">工具</th><th>作用</th></tr></thead>
+      <tbody>
+        <tr><td class="tool"><code>design_diff</code></td><td>设计差异对比：首次存基线，之后比「改了啥」（哪些节点 / 属性增删改），做增量同步。</td></tr>
+        <tr><td class="tool"><code>analyze_project</code></td><td>项目级栈分析探针（自动推断 React / Vue / Tailwind 等）。</td></tr>
+        <tr><td class="tool"><code>scan_components</code></td><td>扫描并内部跑组件检测。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <div class="footer">
+    本页由 figma→code 工具清单自动整理 · 对应仓库 <code>skills/figma-codegen</code> 工作流 · 仅供能力展示
+  </div>
+
+</div>
+</body>
+</html>

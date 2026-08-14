@@ -46,10 +46,10 @@ describe('requiredPluginVersion', () => {
   });
 
   it('never exceeds the server itself', () => {
-    // The window this exists for: the floor is raised in the change that breaks compatibility, which
-    // is always ahead of the release carrying it. Both halves built from that tree report the older
-    // version, and a server that demanded a plugin newer than itself would reject its own build.
-    expect(requiredPluginVersion('0.3.0')).toBe('0.3.0');
+    // The floor (0.1.0, the base of the renamed Figwright-Plus line) caps the requirement, but a
+    // server reporting an even older version caps it lower still — a server must never demand a
+    // plugin newer than itself, or it would reject the very build sitting beside it.
+    expect(requiredPluginVersion('0.0.9')).toBe('0.0.9');
     expect(requiredPluginVersion('0.1.0')).toBe('0.1.0');
   });
 });
@@ -103,15 +103,14 @@ describe('checkPluginCompatibility', () => {
   });
 
   it('is not satisfied below the threshold', () => {
-    expect(checkPluginCompatibility('0.3.0', '0.4.0')).toBe(false);
-    expect(checkPluginCompatibility('0.4.0-beta.1', '0.4.0')).toBe(false);
+    expect(checkPluginCompatibility('0.0.9', '0.1.0')).toBe(false);
+    expect(checkPluginCompatibility('0.1.0-beta.1', '0.1.0')).toBe(false);
   });
 
-  it('is satisfied by a same-generation plugin while the threshold is ahead of the release', () => {
-    // Development on the change that raised the threshold: package.json still says 0.3.0, so both
-    // halves report 0.3.0. Warning here would flag the dev plugin against the server built beside
-    // it — not noise but a false statement.
-    expect(checkPluginCompatibility('0.3.0', '0.3.0')).toBe(true);
+  it('is satisfied by a same-generation plugin on the renamed line', () => {
+    // Both halves built from this fork's tree report 0.1.0-beta-<sha>, so a plugin and server cut
+    // from the same commit are in lockstep. Warning here would be a false statement.
+    expect(checkPluginCompatibility('0.1.0', '0.1.0')).toBe(true);
   });
 
   it('is not satisfied by a version it cannot identify', () => {

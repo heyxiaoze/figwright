@@ -158,10 +158,14 @@ export type ImageFillBytes = z.infer<typeof ImageFillBytesSchema>;
 /**
  * A node's extractable image fills. `images` is empty when the node is missing, has no `fills`
  * property, or carries no IMAGE paint; `mixed:true` marks a node whose `fills` are mixed
- * (per-text-range) and so weren't enumerable.
+ * (per-text-range) and so weren't enumerable. `nodeName` is this layer's Figma name and `parentName`
+ * is its parent layer's name, both carried through so the server can name the exported file
+ * `IMG-[parentName]-[nodeName]` instead of the opaque imageHash.
  */
 export const NodeImageFillsSchema = z.object({
   nodeId: z.string(),
+  nodeName: z.string().optional(),
+  parentName: z.string().optional(),
   images: z.array(ImageFillBytesSchema),
   mixed: z.boolean().optional(),
 });
@@ -172,15 +176,20 @@ export const ImageFillsResultSchema = z.object({ nodes: z.array(NodeImageFillsSc
 export type ImageFillsResult = z.infer<typeof ImageFillsResultSchema>;
 
 /**
- * Per-fill write result. `path` is the written file (named by imageHash so identical images share
- * one file) or null when the fill's image couldn't be resolved. `format` is sniffed from the bytes
- * (PNG / JPG / GIF / WEBP, or BIN for an unrecognized container) and absent when path is null.
+ * Per-fill write result. `path` is the written file, named `IMG-[parentName]-[nodeName][-index]` so
+ * the export is self-describing about where the asset lives and what it depicts, falling back to
+ * `IMG-[nodeName]` when there is no parent and to the imageHash when the name is missing or collides,
+ * so identical images still share one file. `relativePath` is the same file expressed relative to
+ * outDir — portable for importing into a project's asset dir instead of hard-coding the absolute
+ * path. `format` is sniffed from the bytes (PNG / JPG / GIF / WEBP, or BIN for an unrecognized
+ * container) and absent when path is null.
  */
 export const SavedImageFillSchema = z.object({
   index: z.number(),
   imageHash: z.string().nullable(),
   format: z.string().optional(),
   path: z.string().nullable(),
+  relativePath: z.string().nullable(),
   width: z.number().optional(),
   height: z.number().optional(),
   scaleMode: z.string().optional(),
@@ -189,6 +198,8 @@ export type SavedImageFill = z.infer<typeof SavedImageFillSchema>;
 
 export const SavedNodeImageFillsSchema = z.object({
   nodeId: z.string(),
+  nodeName: z.string().optional(),
+  parentName: z.string().optional(),
   images: z.array(SavedImageFillSchema),
   mixed: z.boolean().optional(),
 });

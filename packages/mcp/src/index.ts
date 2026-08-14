@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 
 import { DEFAULT_PORT, type GetScreenshotResult, newId, PROTOCOL_VERSION } from '@figwright/shared';
@@ -38,7 +39,29 @@ import { captureSkew, withSkewNotice } from './tools/skew-notice.js';
 import { handleTokenMap, TOKEN_MAP_TOOL_NAME } from './tools/token-map.js';
 
 const SERVER_NAME = 'figwright';
-const SERVER_VERSION = pkg.version;
+
+// The plugin and server are one product built from the same tree, so they must report the same
+// version string or the skew check (version.ts) fires a false "plugin is older than server" warning
+// on every call. The plugin bakes `0.1.0-beta-<short-sha>` at build time (see
+// packages/plugin/vite.config.ts); the server resolves the same string here, at startup, so a
+// plugin and server cut from the same commit report identical versions and the warning stays
+// silent. When they genuinely diverge (different commits), the warning correctly fires. The string
+// is valid semver (MAJOR.MINOR.PATCH-prerelease) — the shared comparator rejects non-semver strings,
+// which would otherwise mark every result unverified.
+function resolveServerVersion(): string {
+  try {
+    const sha = execSync('git rev-parse --short HEAD', {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+    }).trim();
+    if (/^[0-9a-f]{4,}$/.test(sha)) return `0.1.0-beta-${sha}`;
+  } catch {
+    // Not in a git checkout (e.g. a packaged install) — fall back to the published semver.
+  }
+  return pkg.version;
+}
+
+const SERVER_VERSION = resolveServerVersion();
 
 const log = (msg: string): void => {
   process.stderr.write(`${msg}\n`);
