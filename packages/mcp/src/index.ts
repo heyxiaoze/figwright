@@ -335,7 +335,11 @@ class SelfReportingStdioTransport extends StdioServerTransport {
 
 // Deferred because the trigger only exists once wireShutdown has run, and that needs the transport.
 let triggerShutdown = (): void => {};
-const stdio = serveStdio(createMcpServer, {
+// stdio is inherently a same-machine connection (the MCP client spawned this process locally, or
+// connected over a local pipe) — it is the user's own agent, so it is always read-write regardless
+// of the dashboard's read-only setting. Remote (LAN) peers reach us solely through /mcp, where their
+// token's effective permission governs (see mcp-http.ts).
+const stdio = serveStdio(() => createMcpServer(false), {
   // serveStdio would otherwise construct its own transport, and we need one that reports its death.
   transport: new SelfReportingStdioTransport(() => {
     triggerShutdown();
@@ -357,11 +361,14 @@ log(
 );
 
 // Spell out the permission posture so the operator can see, at a glance, what a connected agent may
-// do. Read-only mode keeps reads + server-local codegen helpers and hides every document mutation.
+// do. Read-only mode keeps reads + server-local codegen helpers and hides every document mutation —
+// but ONLY for remote (LAN) peers. Local (loopback) connections, including this process's own stdio
+// client and any agent connecting to /mcp from 127.0.0.1, are always read-write.
 if (READONLY) {
   log(
-    `[figwright] read-only mode — ${WRITE_TOOL_NAMES.size} write tools hidden; ` +
-      `connected agents can read the Figma file (figma-to-code) but cannot modify it (code-to-figma)`,
+    `[figwright] read-only mode — ${WRITE_TOOL_NAMES.size} write tools hidden for REMOTE (LAN) agents; ` +
+      `local (loopback) connections are always read-write. Remote agents can read the Figma file ` +
+      `(figma-to-code) but cannot modify it (code-to-figma).`,
   );
 }
 

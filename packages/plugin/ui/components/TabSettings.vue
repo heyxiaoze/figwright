@@ -7,7 +7,10 @@ import { RelayClient } from '../relay/client.js';
 import type { RelayClientState } from '../relay/state.js';
 import { parseInvite } from '../lib/invite.js';
 import { copyToClipboard } from '../lib/clipboard.js';
+import { useI18n } from '../i18n/index.js';
 import UiSection from './UiSection.vue';
+
+const { t, notice, locale, setLocale } = useI18n();
 
 const props = defineProps<{
   /** The currently-applied connection target (host/port). */
@@ -63,8 +66,7 @@ const inviteError = ref<string | null>(null);
 const applyInvite = (): void => {
   const parsed = parseInvite(inviteRaw.value);
   if (parsed === null) {
-    inviteError.value =
-      '无法识别的邀请串：应以 figwright://connect? 开头，且包含 host / port。';
+    inviteError.value = t('set.inviteError');
     return;
   }
   form.host = parsed.host;
@@ -80,7 +82,7 @@ const flash = ref('');
 let flashTimer: ReturnType<typeof setTimeout> | undefined;
 const copy = async (text: string, label: string): Promise<void> => {
   const ok = await copyToClipboard(text);
-  flash.value = ok ? `${label}已复制` : `${label}复制失败`;
+  flash.value = ok ? t('set.copied', { label }) : t('set.copyFailed', { label });
   if (flashTimer !== undefined) clearTimeout(flashTimer);
   flashTimer = setTimeout(() => {
     flash.value = '';
@@ -100,14 +102,14 @@ const describeError = (err: string): string => {
     e.includes('network') ||
     e.includes('failed')
   ) {
-    return '无法连接：确认 Host/IP 与端口正确、服务器已启动，且本机网络可达该地址。';
+    return t('set.connError');
   }
   return err;
 };
 
 const connError = computed(() => {
   if (props.state.status === 'connected') return null;
-  return props.state.lastError === null ? null : describeError(props.state.lastError);
+  return props.state.lastError === null ? null : notice(describeError(props.state.lastError));
 });
 
 // "Test connection" opens a throwaway RelayClient against the current form values and reports
@@ -120,7 +122,7 @@ let testTimer: ReturnType<typeof setTimeout> | undefined;
 const onTest = (): void => {
   if (testing.value) return;
   if (portError.value) {
-    testResult.value = { ok: false, message: '端口无效，无法测试' };
+    testResult.value = { ok: false, message: t('set.portError') };
     return;
   }
   testing.value = true;
@@ -146,12 +148,13 @@ const onTest = (): void => {
 
   testStop = client.subscribe(s => {
     if (s.status === 'connected') {
-      done(true, `连接成功（服务器 v${s.serverVersion ?? '未知'}）`);
+      const server = s.serverVersion === null ? '' : t('set.connectedServer', { v: s.serverVersion });
+      done(true, t('set.connected') + server);
     } else if (s.status === 'disconnected' && s.lastError !== null) {
-      done(false, describeError(s.lastError));
+      done(false, notice(describeError(s.lastError)) ?? '');
     }
   });
-  testTimer = setTimeout(() => done(false, '超时：3 秒内未建立连接'), 3000);
+  testTimer = setTimeout(() => done(false, t('set.testTimeout')), 3000);
   // The handshake result (success or a host error) surfaces via the subscribe() callbacks
   // above; swallowing connect()'s rejection here just avoids an unhandled-promise crash.
   void client.connect().catch(() => {});
@@ -165,11 +168,29 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <UiSection title="快速连接（邀请）">
-    <p class="text-meta text-dim">
-      把服务器启动日志里的 <span class="text-fg">invite</span> 一行整段粘贴进来，自动填好 Host / Port，
-      免去手抄。
-    </p>
+  <UiSection :title="t('set.language')">
+    <div class="mt-1 flex gap-2">
+      <button
+        type="button"
+        class="rounded-md border px-3 py-1.5 text-panel transition-colors"
+        :class="locale === 'zh' ? 'border-brand bg-brand/10 text-brand' : 'border-line text-dim hover:text-fg'"
+        @click="setLocale('zh')"
+      >
+        中文
+      </button>
+      <button
+        type="button"
+        class="rounded-md border px-3 py-1.5 text-panel transition-colors"
+        :class="locale === 'en' ? 'border-brand bg-brand/10 text-brand' : 'border-line text-dim hover:text-fg'"
+        @click="setLocale('en')"
+      >
+        English
+      </button>
+    </div>
+  </UiSection>
+
+  <UiSection :title="t('set.quickConnect')">
+    <p class="text-meta text-dim">{{ t('set.quickConnectHint') }}</p>
     <div class="mt-2 flex gap-2">
       <input
         v-model="inviteRaw"
@@ -177,41 +198,36 @@ onBeforeUnmount(() => {
         spellcheck="false"
         autocomplete="off"
         class="min-w-0 flex-1 rounded-md border border-line bg-raised px-2 py-1.5 text-panel text-fg outline-none focus:border-brand"
-        placeholder="figwright://connect?host=…&port=3055"
+        :placeholder="t('set.invitePlaceholder')"
       />
       <button
         type="button"
         class="shrink-0 rounded-md border border-line px-3 py-1.5 text-panel text-dim transition-colors hover:text-fg"
         @click="applyInvite"
       >
-        填入
+        {{ t('set.fillIn') }}
       </button>
     </div>
     <p v-if="inviteError" class="mt-1 text-meta text-danger">{{ inviteError }}</p>
   </UiSection>
 
-  <UiSection title="Connection">
-    <p class="text-meta text-dim">
-      The plugin connects to the Figwright server over this target. The relay is loopback-only, so the
-      plugin must run on the <em>same machine</em> as the server — the default
-      <span class="text-fg">127.0.0.1</span> keeps everything local. Change <span class="text-fg">Host</span>
-      / <span class="text-fg">Port</span> only if your server binds a different local address.
-    </p>
+  <UiSection :title="t('set.connection')">
+    <p class="text-meta text-dim">{{ t('set.connectionHint') }}</p>
 
     <label class="mt-3 block">
-      <span class="text-meta text-dim">Host</span>
+      <span class="text-meta text-dim">{{ t('set.host') }}</span>
       <input
         v-model="form.host"
         type="text"
         spellcheck="false"
         autocomplete="off"
         class="mt-1 w-full rounded-md border border-line bg-raised px-2 py-1.5 text-panel text-fg outline-none focus:border-brand"
-        placeholder="127.0.0.1"
+        :placeholder="t('set.hostPlaceholder')"
       />
     </label>
 
     <label class="mt-2 block">
-      <span class="text-meta text-dim">Port</span>
+      <span class="text-meta text-dim">{{ t('set.port') }}</span>
       <input
         v-model="form.port"
         type="number"
@@ -221,19 +237,19 @@ onBeforeUnmount(() => {
         :class="portError ? 'border-danger' : ''"
       />
       <span v-if="portError" class="mt-1 block text-meta text-danger"
-        >Enter a port between 1 and 65535.</span
+        >{{ t('set.portError') }}</span
       >
     </label>
 
     <div class="mt-3 rounded-md bg-raised px-2 py-1.5">
       <div class="flex items-center justify-between gap-2">
-        <span class="text-meta text-dim">Connection target</span>
+        <span class="text-meta text-dim">{{ t('set.connectionTarget') }}</span>
         <button
           type="button"
           class="shrink-0 text-meta text-brand transition-opacity hover:underline"
-          @click="copy(target, '连接地址')"
+          @click="copy(target, t('set.copyTargetLabel'))"
         >
-          复制
+          {{ t('set.copy') }}
         </button>
       </div>
       <div class="mt-0.5 truncate font-mono text-meta text-fg">{{ target }}</div>
@@ -252,30 +268,30 @@ onBeforeUnmount(() => {
         ]"
         @click="onSave"
       >
-        Save &amp; reconnect
+        {{ t('set.saveReconnect') }}
       </button>
       <button
         type="button"
         class="rounded-md border border-line px-3 py-1.5 text-panel text-dim transition-colors hover:text-fg"
         @click="resetLoopback"
       >
-        Reset to loopback
+        {{ t('set.resetLoopback') }}
       </button>
     </div>
   </UiSection>
 
-  <UiSection title="连接诊断">
+  <UiSection :title="t('set.diagnostics')">
     <template v-if="state.status === 'connected'">
       <p class="text-meta text-success">
-        已连接{{ state.serverVersion === null ? '' : `（服务器 v${state.serverVersion}）` }}
+        {{ t('set.connected') }}{{ state.serverVersion === null ? '' : t('set.connectedServer', { v: state.serverVersion }) }}
       </p>
     </template>
     <template v-else>
-      <p class="text-meta text-dim">当前状态：{{ state.status }}</p>
+      <p class="text-meta text-dim">{{ t('set.currentStatus', { status: state.status }) }}</p>
       <p v-if="connError" class="mt-1 text-meta text-danger">{{ connError }}</p>
     </template>
     <p v-if="state.versionNotice" class="mt-1 text-meta text-warning">
-      版本提示：{{ state.versionNotice }}
+      {{ t('set.versionNotice', { notice: notice(state.versionNotice) ?? '' }) }}
     </p>
 
     <div class="mt-3 flex items-center gap-2">
@@ -285,9 +301,9 @@ onBeforeUnmount(() => {
         class="rounded-md border border-line px-3 py-1.5 text-panel text-dim transition-colors hover:text-fg disabled:opacity-40"
         @click="onTest"
       >
-        测试连接
+        {{ t('set.testConnection') }}
       </button>
-      <span v-if="testing" class="text-meta text-dim">测试中…</span>
+      <span v-if="testing" class="text-meta text-dim">{{ t('set.testing') }}</span>
       <span
         v-else-if="testResult"
         class="text-meta"
@@ -296,7 +312,7 @@ onBeforeUnmount(() => {
       >
     </div>
     <p class="mt-1 text-meta text-faint">
-      用当前表单的 Host / Port 临时握手一次，不影响已保存的连接。
+      {{ t('set.testHandshakeHint') }}
     </p>
   </UiSection>
 </template>

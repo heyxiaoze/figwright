@@ -5,8 +5,8 @@
  * 一个零依赖的本地 Web 控制台（默认 http://127.0.0.1:3056），用来：
  *   1. 一键启动 / 停止 / 重启 figwright MCP server（LAN 模式）
  *   2. 网页里查看运行状态、配置、已连同伴、连接日志
- *   3. 生成「怎么让别人连」的连接指引（本地插件邀请串 + 远程 MCP 命令）
- *   4. 在线编辑配置（host / port / token / readonly）并保存重启
+ *   3. 生成连接指引：本机插件邀请串 + 每令牌专属的远程 MCP 命令（合并自原「访问令牌」「连接指引」）
+ *   4. 在线管理访问令牌（新增 / 删除 / 轮换 / 设定每令牌只读权限），并可在「连接与伙伴」卡里改监听端口并保存重启
  *
  * 设计原则：
  *   - 只绑 localhost，控制台不暴露给局域网（它只是给你自己用的操作面板）。
@@ -34,11 +34,13 @@ const DASH_HTML = join(__dirname, 'dashboard.html');
 const DASH_PORT = Number(process.env.DASH_PORT ?? 3056);
 
 // 默认值：沿用已分发给对方/插件的 token 作为 primary，避免改了以后连不上。
-// tokens 是多令牌数组，每个 { value, label?, readonly? }；readonly 可选，缺省跟随服务器全局。
+// tokens 是多令牌数组，每个 { value, label?, readonly? }；readonly 由各令牌独立控制远端权限。
+// host 固定 0.0.0.0（LAN 模式：绑到非回环地址，让同网段伙伴能连；本地插件走 127.0.0.1 同样可用）
+// —— 控制台不再暴露该字段（永远 0.0.0.0，没必要让用户改）。
+// 不再下发 FIGWRIGHT_READONLY：本机永远双向，远端权限完全由各令牌的 readonly 决定。
 const DEFAULT_CONFIG = {
-  host: '0.0.0.0', // 0.0.0.0 => 非回环 => LAN 模式（本地插件走 127.0.0.1 同样可用）
+  host: '0.0.0.0',
   port: 3055,
-  readonly: true,
   tokens: [{ value: 'Psk7WEW2FoheR1zMGOoMr-fQtaqViIhG', label: 'primary' }],
 };
 
@@ -67,6 +69,7 @@ function loadConfig() {
   }
   if (!Array.isArray(cfg.tokens)) cfg.tokens = [];
   delete cfg.token; // 单字段已废弃，避免与 tokens 混淆
+  delete cfg.readonly; // 全局只读已从控制台移除（本机永远双向，远端权限由令牌决定）
   return cfg;
 }
 let config = loadConfig();
@@ -141,13 +144,13 @@ function startServer() {
   }
   const env = {
     ...process.env,
-    FIGWRIGHT_HOST: config.host,
+    FIGWRIGHT_HOST: config.host, // 固定 0.0.0.0（LAN 模式），控制台不暴露该字段
     FIGWRIGHT_PORT: String(config.port),
     // 多令牌：把 tokens 数组以 JSON 传给 server（server 优先读 FIGWRIGHT_TOKENS）。
     // 同时保留 FIGWRIGHT_TOKEN = primary 以兼容只认单令牌的旧路径。
     FIGWRIGHT_TOKENS: JSON.stringify(config.tokens ?? []),
     FIGWRIGHT_TOKEN: primaryTokenOf(config),
-    FIGWRIGHT_READONLY: config.readonly ? 'true' : 'false',
+    // 不再下发 FIGWRIGHT_READONLY：本机永远双向；远端权限由各令牌的 readonly 决定。
   };
   // 去掉可能污染子进程的 NODE_OPTIONS（如某些环境带 --use-system-ca，figwright 自带 node 不认）
   delete env.NODE_OPTIONS;
@@ -175,7 +178,7 @@ function startServer() {
   child.on('error', (err) => pushLog('启动失败: ' + err.message));
   serverProc = child;
   startedAt = Date.now();
-  pushLog(`启动 figwright MCP server (host=${config.host} port=${config.port} readonly=${config.readonly})`);
+  pushLog(`启动 figwright MCP server (host=${config.host} port=${config.port})`);
   return { ok: true };
 }
 
@@ -237,19 +240,13 @@ function getLanIp() {
 
 function buildGuide() {
   const lanIp = getLanIp();
-  const { port, readonly } = config;
-  const token = primaryTokenOf(config);
+  const { port } = config;
   return {
     lanIp,
-    // 本地 Figma 插件用回环地址（同机），粘贴进「粘贴邀请」——插件走本地 relay，无需 token
+    // 本地 Figma 插件用回环地址（同机），粘贴进「粘贴邀请」——插件走本地 relay，无需 token，永远可读可写
     invite: `figwright://connect?host=127.0.0.1&port=${port}`,
-    // 远程 MCP 客户端（对方 VSCode/Cursor）：用 mcp-remote 走明文 http 桥接
-    mcpRemote: `npx -y mcp-remote http://${lanIp}:${port}/mcp --allow-http --header "x-figwright-token: ${token}"`,
-    // 或者 SSH 端口转发（更安全，且 VSCode 原生支持 localhost）
-    sshTunnel: `ssh -N -L ${port}:localhost:${port} <你的用户名>@${lanIp}`,
-    sshMcpUrl: `http://localhost:${port}/mcp`,
-    readonly,
-    token,
+    // 远程 MCP 客户端（对方 VSCode/Cursor）的 mcp-remote 命令在前端按各令牌拼装（每个伙伴用各自的令牌），
+    // 因此这里不再返回单一 mcpRemote；也不再提供 SSH 端口转发指引。
   };
 }
 
@@ -336,11 +333,9 @@ const server = createServer(async (req, res) => {
   // 保存配置（若运行中则重启生效）
   if (req.method === 'POST' && url.pathname === '/api/config') {
     const body = await readBody(req);
-    if (typeof body.host === 'string') config.host = body.host.trim();
+    // 仅保留端口可改；host 固定 0.0.0.0（LAN），全局 readonly 已从控制台移除（由令牌控制）。
     if (Number.isInteger(body.port) && body.port > 0 && body.port <= 65535)
       config.port = body.port;
-    if (typeof body.token === 'string' && body.token.trim()) config.token = body.token.trim();
-    if (typeof body.readonly === 'boolean') config.readonly = body.readonly;
     saveConfig();
     let r = { ok: true, msg: '已保存' };
     if (serverProc) {
@@ -394,6 +389,19 @@ const server = createServer(async (req, res) => {
       saveConfig();
       if (serverProc) await restartServer();
       r = { ok: true, token: { value, label: 'primary' }, msg: '已轮换 primary 令牌' + (serverProc ? '，已重启生效' : '') };
+    } else if (action === 'setReadonly') {
+      // 调整某令牌的远端权限：只读（对方只能 figma-to-code）或读写（可 code-to-figma）
+      const value = body.value;
+      const ro = body.readonly === true;
+      const t = config.tokens.find((x) => x.value === value);
+      if (!t) {
+        r = { ok: false, msg: '未找到该令牌' };
+      } else {
+        t.readonly = ro;
+        saveConfig();
+        if (serverProc) await restartServer();
+        r = { ok: true, msg: '已更新令牌权限' + (serverProc ? '，已重启生效' : '') };
+      }
     } else {
       r = { ok: false, msg: '未知 action' };
     }

@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { useCopyToClipboard } from '../composables/useCopyToClipboard.js';
+import { useI18n } from '../i18n/index.js';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   /** Button text before a copy; it becomes "Copied" for ~1.5s afterwards. */
@@ -36,6 +39,6 @@ const onClick = (): void => {
     :disabled="disabled"
     @click.stop="onClick"
   >
-    {{ copied ? 'Copied' : label }}
+    {{ copied ? t('copy.copied') : label }}
   </button>
 </template>

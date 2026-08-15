@@ -67,6 +67,19 @@ export const localInterfaceHosts = (): Set<string> => {
 export const isLoopbackHost = (host: string): boolean => LOOPBACK_HOSTS.has(host.toLowerCase());
 
 /**
+ * True when `addr` is a loopback socket address — i.e. the peer is THIS machine itself. Used to
+ * exempt same-machine connections (the user's own local agent, or the Figma plugin on the same Mac)
+ * from restrictions that apply to network peers. Covers IPv4 (`127.0.0.1`), IPv6 (`::1`), the
+ * IPv4-mapped IPv6 form a dual-stack listener reports for a loopback client (`::ffff:127.0.0.1`),
+ * and the hostname `localhost`.
+ */
+export const isLoopbackAddress = (addr: string | undefined): boolean => {
+  if (addr === undefined) return false;
+  const a = addr.toLowerCase();
+  return a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1' || a === 'localhost';
+};
+
+/**
  * Escape hatch for an environment whose plugin host sends an origin we don't anticipate. Read per
  * call rather than at module load so tests (and a user editing their client config) see changes.
  * Deliberately does not lift the host gate: that set is our own bind address, not something an

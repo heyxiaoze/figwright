@@ -1,3 +1,5 @@
+import { t } from '../i18n/index.js';
+
 /** Byte size for the payload previews — bytes below 1 KB, one decimal above. */
 export const formatSize = (bytes: number): string =>
   bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
@@ -25,8 +27,8 @@ export const formatClockTime = (timestamp: number): string => {
  */
 export const formatRelativeTime = (timestamp: number, now: number): string => {
   const seconds = Math.max(0, Math.round((now - timestamp) / 1000));
-  if (seconds < 1) return 'now';
-  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 1) return t('time.now');
+  if (seconds < 60) return t('time.seconds', { s: seconds });
   const minutes = Math.floor(seconds / 60);
-  return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h`;
+  return minutes < 60 ? t('time.minutes', { m: minutes }) : t('time.hours', { h: Math.floor(minutes / 60) });
 };

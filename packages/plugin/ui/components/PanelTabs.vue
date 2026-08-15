@@ -2,8 +2,10 @@
 import { computed } from 'vue';
 
 import { type Tab, TABS } from '../lib/tabs.js';
+import { useI18n } from '../i18n/index.js';
 
 const active = defineModel<Tab>({ required: true });
+const { t } = useI18n();
 
 // Drives the sliding indicator — its offset is the active tab's index, so the pill animates between
 // positions instead of the highlight jumping.
@@ -25,13 +27,13 @@ const activeIndex = computed(() => TABS.findIndex(([id]) => id === active.value)
       }"
     />
     <button
-      v-for="[id, label] in TABS"
+      v-for="[id, key] in TABS"
       :key="id"
       class="relative rounded-md py-1 text-panel transition-colors duration-150"
       :class="active === id ? 'font-medium text-fg' : 'text-dim hover:text-fg'"
       @click="active = id"
     >
-      {{ label }}
+      {{ t(key) }}
     </button>
   </nav>
 </template>

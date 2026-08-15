@@ -1,6 +1,7 @@
 import { createApp } from 'vue';
 
 import App from './App.vue';
+import { t } from './i18n/index.js';
 
 import './style.css';
 
@@ -16,8 +17,8 @@ const showFatal = (msg: string): void => {
   );
 };
 
-globalThis.addEventListener('error', e => showFatal(`error: ${e.message}`));
-globalThis.addEventListener('unhandledrejection', e => showFatal(`rejection: ${String(e.reason)}`));
+globalThis.addEventListener('error', e => showFatal(t('fatal.error', { msg: e.message })));
+globalThis.addEventListener('unhandledrejection', e => showFatal(t('fatal.rejection', { msg: String(e.reason) })));
 
 try {
   const app = createApp(App);

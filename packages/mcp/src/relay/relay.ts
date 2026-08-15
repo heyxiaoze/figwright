@@ -23,20 +23,8 @@ import {
 } from '@figwright/shared';
 import { WebSocketServer, type WebSocket } from 'ws';
 
-import { isAllowedHost, isAllowedWsOrigin } from '../local-access.js';
+import { isAllowedHost, isAllowedWsOrigin, isLoopbackAddress } from '../local-access.js';
 import { DEFAULT_DISCONNECT_GRACE_MS, type Session, SessionManager } from './session.js';
-
-/**
- * True when the socket's peer is this machine itself. A same-machine plugin (Figma on the same Mac
- * as the server, addressing it via 127.0.0.1/::1) is the user, so in LAN mode it is exempt from the
- * shared-token gate — loopback stays a trusted boundary even when the socket is also reachable from
- * the LAN. Remote peers (a different machine on the network) still must present the token.
- */
-const isLoopbackAddress = (addr: string | undefined): boolean => {
-  if (addr === undefined) return false;
-  const a = addr.toLowerCase();
-  return a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1' || a === 'localhost';
-};
 
 /**
  * A WebSocket upgrade may open the relay only from this same machine. The relay is the plugin's

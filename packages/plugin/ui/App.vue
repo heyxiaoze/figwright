@@ -13,7 +13,10 @@ import TabDebug from './components/TabDebug.vue';
 import TabSettings from './components/TabSettings.vue';
 import { useRelaySession } from './composables/useRelaySession.js';
 import { useConnectionSettings } from './composables/useConnectionSettings.js';
+import { useI18n } from './i18n/index.js';
 import type { Tab } from './lib/tabs.js';
+
+const { notice } = useI18n();
 
 const appVersion = __APP_VERSION__;
 
@@ -78,7 +81,7 @@ const embedded = computed(() => context.value !== null && isEmbeddedInPanel(cont
         class="mt-2 rounded-md bg-raised p-1.5 text-meta wrap-break-word"
         :class="state.status === 'connected' ? 'text-warning' : 'text-danger'"
       >
-        {{ state.versionNotice }}
+        {{ notice(state.versionNotice) }}
       </p>
       <PanelTabs v-model="tab" class="mt-2.5" />
     </header>

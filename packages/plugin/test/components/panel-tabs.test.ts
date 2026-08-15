@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import PanelTabs from '../../ui/components/PanelTabs.vue';
 import { TABS } from '../../ui/lib/tabs.js';
+import { en } from '../../ui/i18n/en.js';
 
 const mountTabs = (modelValue: 'activity' | 'context' | 'debug' = 'activity') =>
   mount(PanelTabs, { props: { modelValue } });
@@ -18,7 +19,7 @@ describe('PanelTabs', () => {
       .findAll('button')
       .map(b => b.text());
 
-    expect(labels).toEqual(TABS.map(([, label]) => label));
+    expect(labels).toEqual(TABS.map(([, key]) => en[key as keyof typeof en]));
   });
 
   it('emits the tab id through v-model when a tab is clicked', async () => {

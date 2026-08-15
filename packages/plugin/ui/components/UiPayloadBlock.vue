@@ -2,6 +2,9 @@
 import { formatSize } from '../lib/format.js';
 import UiCopyButton from './UiCopyButton.vue';
 import UiSectionHeading from './UiSectionHeading.vue';
+import { useI18n } from '../i18n/index.js';
+
+const { t } = useI18n();
 
 defineProps<{
   label: string;
@@ -23,7 +26,7 @@ defineProps<{
       <span v-if="bytes !== undefined" class="shrink-0 text-meta text-faint tabular-nums">
         {{ formatSize(bytes) }}
       </span>
-      <UiCopyButton class="ml-auto" label="Copy" :value="preview" compact />
+      <UiCopyButton class="ml-auto" :label="t('set.copy')" :value="preview" compact />
     </div>
 
     <pre
@@ -32,7 +35,7 @@ defineProps<{
       >{{ preview }}</pre>
 
     <p v-if="truncated" class="mt-1 text-meta text-dim">
-      Showing the first part only — the full result was larger.
+      {{ t('payload.truncatedBlock') }}
     </p>
   </div>
 </template>

@@ -159,7 +159,7 @@ describe('RelayClient', () => {
     // background (status flips to 'reconnecting') rather than rejecting.
     await expect(client.connect()).resolves.toBeUndefined();
     expect(client.getState().status).toBe('reconnecting');
-    expect(client.getState().lastError).toMatch(/no Figwright server on :3055/);
+    expect(client.getState().lastError).toMatch(/No Figwright server on :3055/);
     await client.disconnect();
   });
 

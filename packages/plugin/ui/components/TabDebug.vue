@@ -7,6 +7,9 @@ import type { RelayClientState } from '../relay/state.js';
 import UiCopyButton from './UiCopyButton.vue';
 import UiMetaRow from './UiMetaRow.vue';
 import UiSection from './UiSection.vue';
+import { useI18n } from '../i18n/index.js';
+
+const { t, notice } = useI18n();
 
 const props = defineProps<{
   state: RelayClientState;
@@ -36,14 +39,14 @@ const averageMs = computed(() => {
 
 <template>
   <div class="divide-y divide-line px-1.5">
-    <UiSection title="Connection">
+    <UiSection :title="t('dbg.connection')">
       <dl class="space-y-1">
-        <UiMetaRow label="Session" mono>
-          {{ shortId }}{{ state.sessionResumed ? ' (resumed)' : '' }}
+        <UiMetaRow :label="t('dbg.session')" mono>
+          {{ shortId }}{{ state.sessionResumed ? t('dbg.resumed') : '' }}
         </UiMetaRow>
-        <UiMetaRow label="Reconnects" mono>{{ state.reconnectCount }}</UiMetaRow>
-        <UiMetaRow label="Plugin" mono>v{{ pluginVersion }}</UiMetaRow>
-        <UiMetaRow v-if="state.serverVersion !== null" label="Server" mono>
+        <UiMetaRow :label="t('dbg.reconnects')" mono>{{ state.reconnectCount }}</UiMetaRow>
+        <UiMetaRow :label="t('dbg.plugin')" mono>v{{ pluginVersion }}</UiMetaRow>
+        <UiMetaRow v-if="state.serverVersion !== null" :label="t('dbg.server')" mono>
           v{{ state.serverVersion }}
         </UiMetaRow>
       </dl>
@@ -51,21 +54,21 @@ const averageMs = computed(() => {
         v-if="state.lastError !== null"
         class="mt-1.5 rounded-md bg-raised p-1.5 font-mono text-meta wrap-break-word text-danger"
       >
-        {{ state.lastError }}
+        {{ notice(state.lastError) }}
       </p>
     </UiSection>
 
-    <UiSection title="Calls">
+    <UiSection :title="t('dbg.calls')">
       <dl class="space-y-1">
-        <UiMetaRow label="Total" mono>{{ state.totalCalls }}</UiMetaRow>
-        <UiMetaRow label="Failed" mono :value-class="state.failedCalls > 0 ? 'text-danger' : ''">
+        <UiMetaRow :label="t('dbg.total')" mono>{{ state.totalCalls }}</UiMetaRow>
+        <UiMetaRow :label="t('dbg.failed')" mono :value-class="state.failedCalls > 0 ? 'text-danger' : ''">
           {{ state.failedCalls }}
         </UiMetaRow>
-        <UiMetaRow v-if="averageMs !== null" label="Avg (recent)" mono>{{ averageMs }}ms</UiMetaRow>
+        <UiMetaRow v-if="averageMs !== null" :label="t('dbg.avg')" mono>{{ averageMs }}ms</UiMetaRow>
       </dl>
     </UiSection>
 
-    <UiSection title="Recent errors">
+    <UiSection :title="t('dbg.recentErrors')">
       <ul v-if="errorEntries.length > 0" class="space-y-1.5">
         <li v-for="entry in errorEntries" :key="entry.id" class="rounded-md bg-raised p-1.5">
           <div class="flex items-baseline justify-between gap-2">
@@ -82,17 +85,17 @@ const averageMs = computed(() => {
           </div>
         </li>
       </ul>
-      <p v-else class="text-dim">No errors.</p>
+      <p v-else class="text-dim">{{ t('dbg.noErrors') }}</p>
     </UiSection>
 
-    <UiSection title="Diagnostics">
+    <UiSection :title="t('dbg.diagnostics')">
       <UiCopyButton
-        label="Copy diagnostic bundle"
+        :label="t('dbg.copyBundle')"
         :value="buildDiagnostics"
         :disabled="state.activity.length === 0"
       />
       <p class="mt-1.5 text-meta leading-relaxed text-dim">
-        For bug reports · includes your design content.
+        {{ t('dbg.bundleHint') }}
       </p>
     </UiSection>
   </div>

@@ -15,6 +15,7 @@ vi.mock('../../ui/composables/usePanelWindow.js', () => ({
 
 const { default: PanelBackgroundButton } =
   await import('../../ui/components/PanelBackgroundButton.vue');
+import { en } from '../../ui/i18n/en.js';
 
 describe('PanelBackgroundButton', () => {
   beforeEach(() => {
@@ -28,12 +29,12 @@ describe('PanelBackgroundButton', () => {
   });
 
   // The label is dropped to fit the header row, so the accessible name and the tooltip are the only
-  // things left explaining what this does — and the tooltip is where "stays connected" lives.
+  // things left explaining what this does — and the tooltip is where "relay connected" lives.
   it('stays explainable without a visible label', () => {
     const button = mount(PanelBackgroundButton).find('button');
 
     expect(button.text()).toBe('');
-    expect(button.attributes('aria-label')).toBe('Run in background');
-    expect(button.attributes('title')).toContain('relay stays connected');
+    expect(button.attributes('aria-label')).toBe(en['bg.label']);
+    expect(button.attributes('title')).toContain('relay connected');
   });
 });

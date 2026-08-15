@@ -5,14 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Figwright-Plus 控制台</title>
 <style>
-  /* Hallmark · redesign · macrostructure: Workbench · tone: utilitarian · anchor hue: indigo #5956E9 */
+  /* Hallmark · genre: modern-minimal · macrostructure: Control Surface (app console)
+   * tone: technical-utilitarian · anchor hue: indigo #5956E9
+   * redesign: unified 4pt spacing + equal control height + baseline alignment
+   * discipline: every gap/padding/margin references a --sp-* token; every
+   * button/input/select/locale+theme toggle/status pill shares --ctrl-h so the
+   * heights and baselines line up across the whole console.
+   */
   :root {
+    /* ---- color tokens (preserved from prior design) ---- */
     --bg: #0d0e12;
     --surface: #16181d;
     --surface-2: #1c1f26;
     --field: #101216;
     --line: #262a33;
     --line-strong: #343a45;
+    --line-soft: rgba(38,42,51,.5);
     --txt: #e8eaed;
     --muted: #8b929e;
     --accent: #5956e9;
@@ -21,178 +29,259 @@
     --green: #3fb950;
     --red: #f85149;
     --amber: #d29922;
-    --radius-card: 14px;
-    --radius-ctrl: 9px;
+    --hover-surface: #252932;
+    --txt-code: #c8d0db;
+    --txt-log: #9fadbe;
+    --on-accent: #ffffff;
     --shadow: 0 1px 2px rgba(0,0,0,.35), 0 4px 14px rgba(0,0,0,.22);
-    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+
+    /* ---- type scale ---- */
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --fs-2xs: 11px;
+    --fs-xs: 11.5px;
+    --fs-sm: 12px;
+    --fs-md: 13px;
+    --fs-lg: 14px;
+    --fs-stat: 20px;
+
+    /* ---- strict 4pt spacing scale ---- */
+    --sp-1: 4px;
+    --sp-2: 8px;
+    --sp-3: 12px;
+    --sp-4: 16px;
+    --sp-5: 20px;
+    --sp-6: 24px;
+    --sp-8: 32px;
+
+    /* ---- unified control sizing ---- */
+    --ctrl-h: 34px;
+    --radius-card: 14px;
+    --radius-ctrl: 8px;
+    --radius-sm: 6px;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
   }
   /* 亮色主题：覆盖变量即可，其余样式全部走 CSS 变量 */
   :root[data-theme="light"] {
     --bg: #f6f7f9; --surface: #ffffff; --surface-2: #eef0f4; --field: #f1f3f6;
-    --line: #e3e6ec; --line-strong: #cdd2db; --txt: #1b1e24; --muted: #69707d;
+    --line: #e3e6ec; --line-strong: #cdd2db; --line-soft: rgba(20,24,33,.1);
+    --txt: #1b1e24; --muted: #69707d;
     --green: #1a7f37; --red: #cf222e; --amber: #9a6700;
+    --hover-surface: #e6e8ee; --txt-code: #3a4150; --txt-log: #4a5568;
     --shadow: 0 1px 2px rgba(16,18,24,.06), 0 6px 18px rgba(16,18,24,.08);
   }
   * { box-sizing: border-box; }
   html, body { overflow-x: clip; }
 
+  /* ---- header toggle buttons (locale + theme) ---- */
   .theme-btn {
+    width: var(--ctrl-h); height: var(--ctrl-h); padding: 0; flex: none;
     background: transparent; color: var(--muted); border: 1px solid var(--line);
-    width: 34px; height: 34px; padding: 0; border-radius: 9px; font-size: 15px; line-height: 1;
+    border-radius: var(--radius-ctrl); font-size: 14px; line-height: 1;
+    font-weight: 600; cursor: pointer;
+    transition: border-color .15s var(--ease), color .15s var(--ease), background .15s var(--ease);
   }
   .theme-btn:hover { border-color: var(--line-strong); color: var(--txt); }
 
-  .token { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(38,42,51,.5); }
-  .token:last-child { border-bottom: none; }
-  .token .meta { flex: 1; min-width: 0; }
-  .token .lab { font-weight: 600; font-size: 13px; }
-  .token .val { font-family: var(--mono); font-size: 11.5px; color: var(--muted); word-break: break-all; }
-  .token .mini { padding: 4px 9px; font-size: 11.5px; border-radius: 7px; }
-  .ro-badge { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: rgba(210,153,34,.16); color: var(--amber); border: 1px solid rgba(210,153,34,.35); margin-left: 6px; }
-
-  .peer { gap: 12px; }
-  .peer .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-  .peer .dot.on { background: var(--green); box-shadow: 0 0 6px rgba(63,185,80,.7); }
-  .peer .dot.off { background: var(--line-strong); }
-  .peer .meta { flex: 1; min-width: 0; }
-  .peer .lab { font-weight: 600; font-size: 13px; }
-  .peer .sub { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
-
-  .stat { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 12px; }
-  .stat .s { display: flex; flex-direction: column; }
-  .stat .s b { font-size: 19px; font-weight: 700; }
-  .stat .s span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
-
-  .audit-row { display: grid; grid-template-columns: 58px 1fr auto; gap: 10px; align-items: center;
-    font-family: var(--mono); font-size: 12px; padding: 6px 0; border-bottom: 1px solid rgba(38,42,51,.45); }
-  .audit-row:last-child { border-bottom: none; }
-  .audit-row .tool { color: var(--txt); }
-  .audit-row .ok { color: var(--green); } .audit-row .ok.no { color: var(--red); }
-  .audit-row .ms { color: var(--muted); }
-  .icon { font-size: 14px; }
-  body {
-    margin: 0; background: var(--bg); color: var(--txt);
-    font-family: var(--sans);
-    font-size: 14px; line-height: 1.55;
-    -webkit-font-smoothing: antialiased;
-  }
-  .wrap { max-width: 1000px; margin: 0 auto; padding: 30px 22px 64px; }
-  header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding-bottom: 18px; margin-bottom: 22px;
-    border-bottom: 1px solid var(--line);
-  }
-  header h1 {
-    font-size: 18px; margin: 0; font-weight: 650; letter-spacing: -.01em;
-    display: flex; align-items: center; gap: 10px;
-  }
-  header h1::before {
-    content: ""; width: 9px; height: 9px; border-radius: 3px;
-    background: var(--accent); box-shadow: 0 0 0 4px rgba(89,86,233,.18);
-  }
-  .badge {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 5px 13px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
-  }
-  .badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; }
-  .badge.on { background: rgba(63,185,80,.12); color: var(--green); border: 1px solid rgba(63,185,80,.35); }
-  .badge.on::before { background: var(--green); box-shadow: 0 0 6px rgba(63,185,80,.7); }
-  .badge.off { background: rgba(248,81,73,.1); color: var(--red); border: 1px solid rgba(248,81,73,.32); }
-  .badge.off::before { background: var(--red); }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
-  .card {
-    background: var(--surface); border: 1px solid var(--line);
-    border-radius: var(--radius-card); padding: 18px 20px; box-shadow: var(--shadow);
-  }
-  .card h2 {
-    font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em;
-    color: var(--muted); margin: 0 0 14px; font-weight: 700;
-  }
-  .row {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 7px 0; border-bottom: 1px solid rgba(38,42,51,.55);
-  }
-  .row:last-child { border-bottom: none; }
-  .row .k { color: var(--muted); font-size: 13px; }
-  .row .v { font-family: var(--mono); font-size: 13px; color: var(--txt); }
-  .v.green { color: var(--green); } .v.amber { color: var(--amber); } .v.red { color: var(--red); }
-  .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+  /* ---- shared control: every button / input / select shares --ctrl-h ---- */
   button {
+    height: var(--ctrl-h);
+    display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);
+    padding: 0 var(--sp-4);
     background: var(--surface-2); color: var(--txt); border: 1px solid var(--line);
-    padding: 8px 16px; border-radius: var(--radius-ctrl); cursor: pointer;
-    font-size: 13px; font-weight: 600; font-family: var(--sans);
-    transition: background .15s ease, border-color .15s ease, transform .08s ease, opacity .15s ease;
+    border-radius: var(--radius-ctrl); cursor: pointer;
+    font-size: var(--fs-md); font-weight: 600; font-family: var(--font-sans); line-height: 1;
+    transition: background .15s var(--ease), border-color .15s var(--ease), transform .08s var(--ease), opacity .15s var(--ease);
   }
-  button:hover { border-color: var(--line-strong); background: #22262f; }
+  button:hover { border-color: var(--line-strong); background: var(--hover-surface); }
   button:active { transform: translateY(1px); }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
   button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
   button.primary:active { background: var(--accent-press); }
   button.danger { color: var(--red); }
   button.danger:hover { border-color: rgba(248,81,73,.45); background: rgba(248,81,73,.08); }
-  label { display: block; color: var(--muted); margin: 12px 0 5px; font-size: 12px; font-weight: 500; }
+  button.mini { padding: 0 var(--sp-3); font-size: var(--fs-xs); }
+
   input[type=text], input[type=number], select {
-    width: 100%; background: var(--field); color: var(--txt); border: 1px solid var(--line);
-    border-radius: var(--radius-ctrl); padding: 8px 10px; font-family: var(--mono); font-size: 13px;
-    transition: border-color .15s ease, box-shadow .15s ease;
+    width: 100%; height: var(--ctrl-h);
+    background: var(--field); color: var(--txt); border: 1px solid var(--line);
+    border-radius: var(--radius-ctrl); padding: 0 var(--sp-3);
+    font-family: var(--font-mono); font-size: var(--fs-md); line-height: var(--ctrl-h);
+    transition: border-color .15s var(--ease), box-shadow .15s var(--ease);
   }
   input[type=text]:focus, input[type=number]:focus, select:focus {
     outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(89,86,233,.22);
   }
-  .inline { display: flex; gap: 10px; align-items: flex-end; }
-  .inline > div { flex: 1; min-width: 0; }
-  .pw { position: relative; display: flex; align-items: center; }
-  .pw input { padding-right: 66px; }
-  .pw-toggle {
-    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
-    background: var(--surface-2); color: var(--accent); border: 1px solid var(--line);
-    border-radius: 7px; padding: 4px 11px; font-size: 11.5px; font-weight: 600;
-    font-family: var(--sans); line-height: 1.2; cursor: pointer;
-    transition: background .15s ease, border-color .15s ease, color .15s ease;
+
+  label { display: block; color: var(--muted); font-size: var(--fs-sm); font-weight: 500; margin: 0 0 var(--sp-2); }
+
+  /* checkbox rows align to the same control band as inputs/buttons */
+  .ro-check, .ro-toggle {
+    display: inline-flex; align-items: center; gap: var(--sp-2);
+    height: var(--ctrl-h);
+    color: var(--txt); font-size: var(--fs-sm); cursor: pointer;
   }
-  .pw-toggle:hover { border-color: var(--line-strong); background: #22262f; }
-  .pw-toggle:active { transform: translateY(-50%) translateY(1px); }
-  .pw-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .ro-check input, .ro-toggle input { width: auto; margin: 0; accent-color: var(--accent); }
+
+  /* ---- layout shell ---- */
+  body {
+    margin: 0; background: var(--bg); color: var(--txt);
+    font-family: var(--font-sans);
+    font-size: var(--fs-lg); line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: var(--sp-6) var(--sp-5) var(--sp-8); }
+  header {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4);
+    padding-bottom: var(--sp-4); margin-bottom: var(--sp-5);
+    border-bottom: 1px solid var(--line);
+  }
+  header h1 {
+    font-size: 18px; margin: 0; font-weight: 650; letter-spacing: -.01em;
+    display: flex; align-items: center; gap: var(--sp-3);
+  }
+  header h1::before {
+    content: ""; width: 9px; height: 9px; border-radius: 3px; flex: none;
+    background: var(--accent); box-shadow: 0 0 0 4px rgba(89,86,233,.18);
+  }
+  .head-right { display: flex; align-items: center; gap: var(--sp-2); }
+
+  /* status pill — same height as the toggle buttons */
+  .badge {
+    display: inline-flex; align-items: center; gap: var(--sp-2); height: var(--ctrl-h);
+    padding: 0 var(--sp-4); border-radius: 999px; font-size: var(--fs-sm); font-weight: 600;
+  }
+  .badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .badge.on { background: rgba(63,185,80,.12); color: var(--green); border: 1px solid rgba(63,185,80,.35); }
+  .badge.on::before { background: var(--green); box-shadow: 0 0 6px rgba(63,185,80,.7); }
+  .badge.off { background: rgba(248,81,73,.1); color: var(--red); border: 1px solid rgba(248,81,73,.32); }
+  .badge.off::before { background: var(--red); }
+
+  /* ---- dashboard grid (panels stretch to equal height per row) ---- */
+  .dash {
+    display: grid;
+    grid-template-columns: 5fr 7fr;
+    grid-template-areas:
+      "status  peers"
+      "connect connect"
+      "audit   log";
+    gap: var(--sp-4);
+  }
+  .cell-status  { grid-area: status; }
+  .cell-peers   { grid-area: peers; }
+  .cell-connect { grid-area: connect; }
+  .cell-audit   { grid-area: audit; }
+  .cell-log     { grid-area: log; }
+  @media (max-width: 860px) {
+    .dash {
+      grid-template-columns: 1fr;
+      grid-template-areas: "status" "peers" "connect" "audit" "log";
+    }
+  }
+
+  /* ---- card ---- */
+  .card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius-card); padding: var(--sp-5); min-width: 0;
+  }
+  .card h2 {
+    font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .08em;
+    color: var(--muted); margin: 0 0 var(--sp-4); font-weight: 700;
+  }
+
+  /* key/value rows — equal min-height keeps baselines aligned */
+  .row {
+    display: flex; justify-content: space-between; align-items: center; gap: var(--sp-4);
+    min-height: var(--ctrl-h); padding: var(--sp-2) 0; border-bottom: 1px solid var(--line-soft);
+  }
+  .row:last-of-type { border-bottom: none; }
+  .row .k { color: var(--muted); font-size: var(--fs-md); }
+  .row .v { font-family: var(--font-mono); font-size: var(--fs-md); color: var(--txt); }
+  .v.green { color: var(--green); } .v.amber { color: var(--amber); } .v.red { color: var(--red); }
+
+  /* button row under a card */
+  .btns { display: flex; gap: var(--sp-2); flex-wrap: wrap; margin-top: var(--sp-4); }
+
+  /* inline form row (label/input + action) — bottoms align on the control band */
+  .inline { display: flex; gap: var(--sp-3); align-items: flex-end; flex-wrap: wrap; }
+  .inline > .field { flex: 1 1 180px; min-width: 0; }
+  .field label { margin: 0 0 var(--sp-2); }
+
+  .hint { color: var(--muted); font-size: var(--fs-sm); margin: 0 0 var(--sp-3); line-height: 1.5; }
+  .empty { color: var(--muted); font-size: var(--fs-md); padding: var(--sp-2) 0; }
+  .rule { border: none; border-top: 1px solid var(--line); margin: var(--sp-5) 0; }
+
+  /* command block */
   .cmd {
     background: var(--field); border: 1px solid var(--line); border-radius: var(--radius-ctrl);
-    padding: 13px 14px; font-family: var(--mono); font-size: 12px; line-height: 1.55;
-    color: #c8d0db; white-space: pre-wrap; word-break: break-all;
-    margin: 8px 0 4px; position: relative;
+    padding: var(--sp-3) 56px var(--sp-3) var(--sp-4);
+    font-family: var(--font-mono); font-size: var(--fs-sm); line-height: 1.55;
+    color: var(--txt-code); margin: var(--sp-3) 0; position: relative; overflow-x: auto; white-space: nowrap;
   }
   .cmd .copy {
-    position: absolute; top: 8px; right: 8px; font-size: 11px; padding: 4px 11px;
-    background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px;
-    color: var(--accent); cursor: pointer; transition: background .15s ease, border-color .15s ease;
+    position: absolute; top: var(--sp-2); right: var(--sp-2); font-size: var(--fs-xs);
+    padding: var(--sp-1) var(--sp-3);
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm);
+    color: var(--accent); cursor: pointer; transition: background .15s var(--ease), border-color .15s var(--ease);
   }
-  .cmd .copy:hover { background: #252932; border-color: var(--line-strong); }
-  .hint { color: var(--muted); font-size: 12px; margin: 4px 0 2px; line-height: 1.5; }
+  .cmd .copy:hover { background: var(--hover-surface); border-color: var(--line-strong); }
+
+  /* peers — rows align center, equal rhythm */
+  .peer {
+    display: flex; justify-content: space-between; align-items: center; gap: var(--sp-3);
+    padding: var(--sp-2) 0; border-bottom: 1px solid var(--line-soft);
+    font-family: var(--font-mono); font-size: var(--fs-md);
+  }
+  .peer:last-of-type { border-bottom: none; }
+  .peer .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .peer .dot.on { background: var(--green); box-shadow: 0 0 6px rgba(63,185,80,.7); }
+  .peer .dot.off { background: var(--line-strong); }
+  .peer .meta { flex: 1; min-width: 0; }
+  .peer .lab { font-weight: 600; font-size: var(--fs-md); }
+  .peer .sub { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); }
+  .peer .v { color: var(--muted); font-size: var(--fs-sm); }
+
+  /* tokens — head row aligns center; mini actions share --ctrl-h */
+  .token { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3) 0; border-bottom: 1px solid var(--line-soft); }
+  .token:last-of-type { border-bottom: none; }
+  .token .head { display: flex; align-items: center; gap: var(--sp-3); }
+  .token .meta { flex: 1; min-width: 0; }
+  .token .lab { font-weight: 600; font-size: var(--fs-md); }
+  .token .val { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); word-break: break-all; }
+  .token .tok-actions { display: flex; gap: var(--sp-2); align-items: center; }
+  .ro-badge { font-size: var(--fs-2xs); font-weight: 700; padding: var(--sp-1) var(--sp-2); border-radius: 999px; background: rgba(210,153,34,.16); color: var(--amber); border: 1px solid rgba(210,153,34,.35); margin-left: var(--sp-2); }
+
+  /* stats — equal min-height so the four cells stay aligned */
+  .stat { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: var(--sp-3); margin-bottom: var(--sp-4); }
+  .stat .s { min-height: var(--ctrl-h); display: flex; flex-direction: column; justify-content: center; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-ctrl); padding: var(--sp-3) var(--sp-4); }
+  .stat .s b { display: block; font-size: var(--fs-stat); font-weight: 700; font-family: var(--font-mono); line-height: 1.1; }
+  .stat .s span { font-size: var(--fs-xs); color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+
+  /* audit rows — 3-col grid, aligned center */
+  .audit-row { display: grid; grid-template-columns: 56px 1fr auto; gap: var(--sp-3); align-items: center;
+    font-family: var(--font-mono); font-size: var(--fs-sm); padding: var(--sp-2) 0; border-bottom: 1px solid var(--line-soft); }
+  .audit-row:last-of-type { border-bottom: none; }
+  .audit-row .tool { color: var(--txt); }
+  .audit-row .ok { color: var(--green); } .audit-row .ok.no { color: var(--red); }
+  .audit-row .ms { color: var(--muted); }
+
+  /* live log */
   #log {
     background: var(--field); border: 1px solid var(--line); border-radius: var(--radius-ctrl);
-    padding: 12px 14px; font-family: var(--mono); font-size: 12px; line-height: 1.6;
-    height: 260px; overflow-y: auto; white-space: pre-wrap; color: #9fadbe;
+    padding: var(--sp-3) var(--sp-4); font-family: var(--font-mono); font-size: var(--fs-sm); line-height: 1.6;
+    height: 260px; overflow-y: auto; white-space: pre-wrap; color: var(--txt-log);
   }
-  .peer {
-    display: flex; justify-content: space-between; align-items: center; gap: 12px;
-    font-family: var(--mono); font-size: 13px; padding: 8px 0;
-    border-bottom: 1px solid rgba(38,42,51,.55);
-  }
-  .peer:last-child { border-bottom: none; }
-  .peer .v { color: var(--muted); font-size: 12px; }
-  .empty { color: var(--muted); font-size: 13px; padding: 6px 0; }
+
+  /* toast */
   .toast {
-    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    position: fixed; bottom: var(--sp-6); left: 50%; transform: translateX(-50%);
     background: var(--surface-2); border: 1px solid var(--accent);
-    color: var(--txt); padding: 10px 20px; border-radius: var(--radius-ctrl);
-    opacity: 0; transition: opacity .25s ease; pointer-events: none; font-size: 13px; box-shadow: var(--shadow);
+    color: var(--txt); padding: var(--sp-3) var(--sp-5); border-radius: var(--radius-ctrl);
+    opacity: 0; transition: opacity .25s var(--ease); pointer-events: none; font-size: var(--fs-md); box-shadow: var(--shadow);
   }
   .toast.show { opacity: 1; }
-  .pill {
-    font-size: 11px; font-weight: 600; letter-spacing: .04em; padding: 3px 9px;
-    border-radius: 999px; background: var(--surface-2); color: var(--muted); border: 1px solid var(--line);
-  }
+
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; }
   }
@@ -201,124 +290,322 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>Figwright-Plus 控制台 <span class="pill" id="modePill"></span></h1>
-    <div style="display:flex; align-items:center; gap:10px;">
-      <button id="btnTheme" class="theme-btn" title="切换亮/暗主题" aria-label="切换主题">🌙</button>
-      <span id="statusBadge" class="badge off">未运行</span>
+    <h1 data-i18n="app.title">Figwright-Plus 控制台</h1>
+    <div class="head-right">
+      <button id="btnLang" class="theme-btn" data-i18n="lang.btn" aria-label="切换语言">EN</button>
+      <button id="btnTheme" class="theme-btn" aria-label="切换亮/暗主题">🌙</button>
+      <span id="statusBadge" class="badge off" data-i18n="dash.stopped">未运行</span>
     </div>
   </header>
 
-  <div class="grid">
+  <div class="dash">
     <!-- 运行状态 -->
-    <div class="card">
-      <h2>运行状态</h2>
-      <div class="row"><span class="k">server</span><span class="v" id="rState">—</span></div>
-      <div class="row"><span class="k">PID</span><span class="v" id="rPid">—</span></div>
-      <div class="row"><span class="k">运行时长</span><span class="v" id="rUptime">—</span></div>
-      <div class="row"><span class="k">监听地址</span><span class="v" id="rHost">—</span></div>
-      <div class="row"><span class="k">端口</span><span class="v" id="rPort">—</span></div>
-      <div class="row"><span class="k">模式</span><span class="v" id="rMode">—</span></div>
+    <section class="card cell-status">
+      <h2 data-i18n="status.card">运行状态</h2>
+      <div class="row"><span class="k" data-i18n="k.server">Server</span><span class="v" id="rState">—</span></div>
+      <div class="row"><span class="k" data-i18n="k.pid">PID</span><span class="v" id="rPid">—</span></div>
+      <div class="row"><span class="k" data-i18n="k.uptime">运行时长</span><span class="v" id="rUptime">—</span></div>
+      <div class="row"><span class="k" data-i18n="k.port">端口</span><span class="v" id="rPort">—</span></div>
       <div class="btns">
-        <button class="primary" id="btnStart">启动</button>
-        <button id="btnStop">停止</button>
-        <button id="btnRestart">重启</button>
+        <button class="primary" id="btnStart" data-i18n="btn.start">启动</button>
+        <button id="btnStop" data-i18n="btn.stop">停止</button>
+        <button id="btnRestart" data-i18n="btn.restart">重启</button>
       </div>
-    </div>
-
-    <!-- 配置 -->
-    <div class="card">
-      <h2>配置</h2>
-      <div class="inline">
-        <div>
-          <label>监听地址 (host)</label>
-          <input type="text" id="cHost" />
-        </div>
-        <div style="max-width:90px">
-          <label>端口</label>
-          <input type="number" id="cPort" />
-        </div>
-      </div>
-      <label>模式</label>
-      <select id="cReadonly">
-        <option value="true">只读（对方只能读，不能写 Figma）</option>
-        <option value="false">读写（对方可写回 Figma）</option>
-      </select>
-      <div class="btns"><button class="primary" id="btnSave">保存配置</button></div>
-      <p class="hint">保存后若 server 在运行会自动重启生效。访问令牌请在下方「访问令牌」卡片管理。</p>
-    </div>
-
-    <!-- 访问令牌 -->
-    <div class="card">
-      <h2>访问令牌</h2>
-      <div id="tokenList"></div>
-      <div class="inline" style="margin-top:14px;">
-        <div>
-          <label>新增令牌标签（可选）</label>
-          <input type="text" id="tLabel" placeholder="例如：Alice 的 VSCode" />
-        </div>
-        <div style="max-width:120px; display:flex; flex-direction:column; justify-content:flex-end;">
-          <label style="display:flex; align-items:center; gap:6px; color:var(--txt); font-size:12px;">
-            <input type="checkbox" id="tReadonly" style="width:auto;" /> 只读
-          </label>
-        </div>
-      </div>
-      <div class="btns">
-        <button class="primary" id="btnAddToken">新增令牌</button>
-        <button id="btnRotate">轮换 primary</button>
-      </div>
-      <p class="hint">每个令牌可独立撤销 / 设为只读；对方用各自令牌连接。轮换 primary 会作废旧 primary 并生成新令牌（已分享给插件的邀请串需重新复制）。</p>
-    </div>
-
-    <!-- 活动与审计 -->
-    <div class="card">
-      <h2>活动与审计</h2>
-      <div class="stat" id="statBox">
-        <div class="s"><b id="sCalls">0</b><span>工具调用</span></div>
-        <div class="s"><b id="sOk">—</b><span>成功率</span></div>
-        <div class="s"><b id="sPeers">0</b><span>已连同伴</span></div>
-        <div class="s"><b id="sRate">0</b><span>近 1 分钟</span></div>
-      </div>
-      <div id="auditList"><div class="empty">暂无工具调用</div></div>
-    </div>
+    </section>
 
     <!-- 已连同伴 -->
-    <div class="card">
-      <h2>已连同伴</h2>
+    <section class="card cell-peers">
+      <h2 data-i18n="peers.card">已连同伴</h2>
       <div id="peerList"><div class="empty">暂无同伴连接</div></div>
-      <p class="hint">这里显示的是走 /mcp 的远程智能体（你分享给的人）。本地 Figma 插件状态请在 Figma 插件面板查看。</p>
+      <p class="hint" data-i18n="peers.hint">通过 /mcp 接入的远程智能体，即你授权的伙伴。本地 Figma 插件的连接状态请在 Figma 插件面板查看。</p>
+    </section>
+
+  <!-- 连接与伙伴 -->
+  <section class="card cell-connect">
+    <h2 data-i18n="connect.card">连接与伙伴</h2>
+
+    <p class="hint" style="margin-top:0;" data-i18n="connect.localHint">本机连接（你的 Figma 插件）</p>
+    <div class="inline">
+      <div class="field">
+        <label data-i18n="port.label">监听端口</label>
+        <input type="number" id="cPort" />
+      </div>
+      <button class="primary" id="btnSavePort" data-i18n="btn.savePort">保存并重启</button>
     </div>
+    <p class="hint" data-i18n="port.hint">修改端口保存后会自动重启 MCP server，并记得同步更新下方伙伴命令与插件邀请串里的端口。</p>
+    <div class="cmd"><span class="copy" data-copy="invite" data-i18n="dash.copy">复制</span><span id="gInvite">—</span></div>
+    <p class="hint" data-i18n="invite.hint">本机 Figma 插件粘贴此邀请串即可连接（走本地中继，免令牌，始终可读可写）。</p>
 
-    <!-- 让别人连 -->
-    <div class="card">
-      <h2>连接指引</h2>
-      <p class="hint">① 本机 Figma 插件 —— 复制邀请串，粘贴进插件「粘贴邀请」：</p>
-      <div class="cmd"><span class="copy" data-copy="invite">复制</span><span id="gInvite">—</span></div>
+    <hr class="rule" />
 
-      <p class="hint">② 对方 VSCode / Cursor（远程 MCP）—— 用 mcp-remote 桥接明文 http：</p>
-      <div class="cmd"><span class="copy" data-copy="mcpRemote">复制</span><span id="gMcpRemote">—</span></div>
-
-      <p class="hint">③ SSH 端口转发（VSCode 原生支持 localhost）：</p>
-      <div class="cmd"><span class="copy" data-copy="sshTunnel">复制</span><span id="gSsh">—</span></div>
-      <p class="hint" id="gSshNote">转发后对方 MCP 配置填 <span class="v" id="gSshUrl">—</span></p>
+    <p class="hint" style="margin-top:0;" data-i18n="connect.remoteHint">远程伙伴令牌（每条令牌即一个连接入口，权限由此令牌决定）</p>
+    <div id="tokenList"></div>
+    <div class="inline" style="margin-top: var(--sp-4);">
+      <div class="field" style="flex: 1 1 220px;">
+        <label data-i18n="token.labelHint">新增令牌标签（可选）</label>
+        <input type="text" id="tLabel" data-i18n-ph="token.placeholder" placeholder="例如：Alice 的 VSCode" />
+      </div>
+      <label class="ro-check"><input type="checkbox" id="tReadonly" /> <span data-i18n="token.readonly">只读</span></label>
     </div>
-
-    <!-- 日志 -->
-    <div class="card" style="grid-column: 1 / -1;">
-      <h2>实时日志</h2>
-      <div id="log"></div>
+    <div class="btns">
+      <button class="primary" id="btnAddToken" data-i18n="btn.addToken">新增令牌</button>
+      <button id="btnRotate" data-i18n="btn.rotate">轮换主令牌</button>
     </div>
+    <p class="hint" data-i18n="token.hint">每个令牌即一位伙伴的连接凭证，其「只读」开关决定权限：只读 = 仅 figma-to-code（读）；读写 = 可 code-to-figma（写）。删除或轮换会立即让该伙伴断连。</p>
+  </section>
+
+  <!-- 活动与审计 -->
+  <section class="card cell-audit">
+    <h2 data-i18n="audit.card">活动与审计</h2>
+    <div class="stat" id="statBox">
+      <div class="s"><b id="sCalls">0</b><span data-i18n="stat.calls">工具调用</span></div>
+      <div class="s"><b id="sOk">—</b><span data-i18n="stat.ok">成功率</span></div>
+      <div class="s"><b id="sPeers">0</b><span data-i18n="stat.peers">已连同伴</span></div>
+      <div class="s"><b id="sRate">0</b><span data-i18n="stat.recent">近 1 分钟</span></div>
+    </div>
+    <div id="auditList"><div class="empty">暂无工具调用</div></div>
+  </section>
+
+  <!-- 实时日志 -->
+  <section class="card cell-log">
+    <h2 data-i18n="log.card">实时日志</h2>
+    <div id="log"></div>
+  </section>
   </div>
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script>
+// ---------------------------------------------------------------------------
+// i18n (zh / en) — mirrors the plugin's minimal dictionary approach.
+// Locale is detected from the browser and persisted in localStorage (fp-lang),
+// so the toggle here and the one in the Figma plugin stay independent. Strings
+// that originate on the server are localized on the frontend by the action the
+// UI sent (see serverMsg / actionToast) — the server wire format is unchanged.
+// ---------------------------------------------------------------------------
+const EN = {
+  'app.title': 'Figwright-Plus Console',
+  'theme.aria': 'Toggle light / dark theme',
+  'lang.btn': 'Language',
+  'status.card': 'Status',
+  'k.server': 'Server',
+  'k.pid': 'PID',
+  'k.uptime': 'Uptime',
+  'k.port': 'Port',
+  'btn.start': 'Start',
+  'btn.stop': 'Stop',
+  'btn.restart': 'Restart',
+  'peers.card': 'Peers',
+  'peers.hint': 'Remote agents connect over /mcp — these are the partners you shared access with. For your local Figma plugin status, open the Figma plugin panel.',
+  'connect.card': 'Connection & partners',
+  'connect.localHint': 'Local connection (your Figma plugin)',
+  'port.label': 'Listen port',
+  'btn.savePort': 'Save & restart',
+  'port.hint': 'Saving a new port auto-restarts the MCP server. Update the port in the partner commands and invite string below afterward.',
+  'invite.hint': 'Paste this invite string into your local Figma plugin to connect (loopback relay, no token, always read/write).',
+  'connect.remoteHint': 'Remote partner tokens — each one grants a connection and its permission is set here',
+  'token.labelHint': 'New token label (optional)',
+  'token.placeholder': "e.g. Alice's VSCode",
+  'token.readonly': 'Read-only',
+  'btn.addToken': 'Add token',
+  'btn.rotate': 'Rotate primary token',
+  'token.hint': 'Each token is one partner’s credential. Its read-only switch decides permission (read-only = figma-to-code only; read/write = code-to-figma). Deleting or rotating disconnects that partner immediately.',
+  'audit.card': 'Activity & audit',
+  'stat.calls': 'Tool calls',
+  'stat.ok': 'Success',
+  'stat.peers': 'Peers',
+  'stat.recent': 'Last 1 min',
+  'log.card': 'Live log',
+
+  'dash.running': 'Running',
+  'dash.stopped': 'Stopped',
+  'dash.noPeers': 'No peers connected',
+  'dash.noTokens': 'No tokens configured',
+  'dash.noCalls': 'No tool calls yet',
+  'dash.localPlugin': 'Local Figma plugin',
+  'dash.remotePlugin': 'Remote Figma plugin',
+  'dash.remoteAgent': 'Remote agent',
+  'dash.tokenLabel': 'token: {label}',
+  'dash.hits': '{n} calls',
+  'dash.tokenN': 'Token {n}',
+  'dash.readonlyBadge': 'read-only',
+  'dash.copy': 'Copy',
+  'dash.delete': 'Delete',
+  'dash.copyCmd': 'Copy command',
+  'dash.secAgo': '{n}s ago',
+  'dash.minAgo': '{n}m ago',
+  'dash.hourAgo': '{n}h ago',
+
+  'dash.started': 'Server started',
+  'dash.stoppedToast': 'Server stopped',
+  'dash.restarted': 'Server restarted',
+  'dash.saved': 'Saved',
+  'dash.tokenAdded': 'Token added',
+  'dash.primaryRotated': 'Primary token rotated',
+  'dash.tokenRemoved': 'Token removed',
+  'dash.permUpdated': 'Permission updated',
+  'dash.restartedSuffix': 'applied after restart',
+  'dash.serverRunning': 'Server is already running',
+  'dash.serverNotRunning': 'Server is not running',
+  'dash.distMissing': 'Build missing — run: pnpm --filter @figwright/mcp build',
+  'dash.unknownAction': 'Unknown action',
+  'dash.missingValue': 'Missing value',
+  'dash.tokenNotFound': 'Token not found',
+  'dash.ok': 'OK',
+  'dash.fail': 'Failed',
+  'dash.staleConsole': 'Endpoint missing — the console process may be outdated. Restart "node scripts/dashboard.mjs" in your terminal and hard-refresh.',
+  'dash.copiedToken': 'Token copied',
+  'dash.copyFailedManual': 'Copy failed — select manually',
+  'dash.copiedClipboard': 'Copied to clipboard',
+  'dash.confirmDelete': 'Delete this token? Partners using it will lose connection immediately.',
+};
+const ZH = {
+  'app.title': 'Figwright-Plus 控制台',
+  'theme.aria': '切换亮/暗主题',
+  'lang.btn': '语言',
+  'status.card': '运行状态',
+  'k.server': '服务端',
+  'k.pid': 'PID',
+  'k.uptime': '运行时长',
+  'k.port': '端口',
+  'btn.start': '启动',
+  'btn.stop': '停止',
+  'btn.restart': '重启',
+  'peers.card': '已连同伴',
+  'peers.hint': '通过 /mcp 接入的远程智能体，即你授权的伙伴。本地 Figma 插件的连接状态请在 Figma 插件面板查看。',
+  'connect.card': '连接与伙伴',
+  'connect.localHint': '本机连接（你的 Figma 插件）',
+  'port.label': '监听端口',
+  'btn.savePort': '保存并重启',
+  'port.hint': '修改端口保存后会自动重启 MCP server，并记得同步更新下方伙伴命令与插件邀请串里的端口。',
+  'invite.hint': '本机 Figma 插件粘贴此邀请串即可连接（走本地中继，免令牌，始终可读可写）。',
+  'connect.remoteHint': '远程伙伴令牌（每条令牌即一个连接入口，权限由此令牌决定）',
+  'token.labelHint': '新增令牌标签（可选）',
+  'token.placeholder': '例如：Alice 的 VSCode',
+  'token.readonly': '只读',
+  'btn.addToken': '新增令牌',
+  'btn.rotate': '轮换主令牌',
+  'token.hint': '每个令牌即一位伙伴的连接凭证，其「只读」开关决定权限：只读 = 仅 figma-to-code（读）；读写 = 可 code-to-figma（写）。删除或轮换会立即让该伙伴断连。',
+  'audit.card': '活动与审计',
+  'stat.calls': '工具调用',
+  'stat.ok': '成功率',
+  'stat.peers': '已连同伴',
+  'stat.recent': '近 1 分钟',
+  'log.card': '实时日志',
+
+  'dash.running': '运行中',
+  'dash.stopped': '已停止',
+  'dash.noPeers': '暂无同伴连接',
+  'dash.noTokens': '尚未配置令牌',
+  'dash.noCalls': '暂无工具调用',
+  'dash.localPlugin': '本机 Figma 插件',
+  'dash.remotePlugin': '远程 Figma 插件',
+  'dash.remoteAgent': '远程智能体',
+  'dash.tokenLabel': '令牌：{label}',
+  'dash.hits': '{n} 次',
+  'dash.tokenN': '令牌 {n}',
+  'dash.readonlyBadge': '只读',
+  'dash.copy': '复制',
+  'dash.delete': '删除',
+  'dash.copyCmd': '复制命令',
+  'dash.secAgo': '{n} 秒前',
+  'dash.minAgo': '{n} 分钟前',
+  'dash.hourAgo': '{n} 小时前',
+
+  'dash.started': '服务端已启动',
+  'dash.stoppedToast': '服务端已停止',
+  'dash.restarted': '服务端已重启',
+  'dash.saved': '已保存',
+  'dash.tokenAdded': '已新增令牌',
+  'dash.primaryRotated': '已轮换主令牌',
+  'dash.tokenRemoved': '已删除令牌',
+  'dash.permUpdated': '已更新令牌权限',
+  'dash.restartedSuffix': '已重启生效',
+  'dash.serverRunning': '服务端已在运行',
+  'dash.serverNotRunning': '服务端未在运行',
+  'dash.distMissing': '构建产物（dist）缺失，请先运行：pnpm --filter @figwright/mcp build',
+  'dash.unknownAction': '未知 action',
+  'dash.missingValue': '缺少 value',
+  'dash.tokenNotFound': '未找到该令牌',
+  'dash.ok': '成功',
+  'dash.fail': '失败',
+  'dash.staleConsole': '接口不存在：控制台进程可能过旧，请在终端重启「node scripts/dashboard.mjs」并硬刷新页面',
+  'dash.copiedToken': '已复制令牌',
+  'dash.copyFailedManual': '复制失败，请手动选择',
+  'dash.copiedClipboard': '已复制到剪贴板',
+  'dash.confirmDelete': '确定删除该令牌？使用该令牌的同伴将立即失去连接。',
+};
+const DICTS = { en: EN, zh: ZH };
+const LANG_KEY = 'fp-lang';
+const detectLocale = () => {
+  try { const s = localStorage.getItem(LANG_KEY); if (s === 'en' || s === 'zh') return s; } catch {}
+  const nav = (navigator.language || 'en').toLowerCase();
+  return nav.startsWith('zh') ? 'zh' : 'en';
+};
+let locale = detectLocale();
+const setLocale = (next) => {
+  locale = next;
+  try { localStorage.setItem(LANG_KEY, next); } catch {}
+};
+const t = (key, params) => {
+  const tmpl = (DICTS[locale] && DICTS[locale][key]) || EN[key] || key;
+  if (!params) return tmpl;
+  return tmpl.replace(/\{(\w+)\}/g, (whole, k) => (k in params ? String(params[k]) : whole));
+};
+
+// Localize server-originated messages without touching the server contract.
+// Failures are matched by their known constant; successes are keyed off the
+// action the UI sent. Anything unrecognized degrades to the raw (zh) string.
+function serverMsg(msg) {
+  if (!msg) return '';
+  const map = {
+    'server 已在运行': 'dash.serverRunning',
+    'server 未在运行': 'dash.serverNotRunning',
+    'dist 缺失，请先构建：pnpm --filter @figwright/mcp build': 'dash.distMissing',
+    '未知 action': 'dash.unknownAction',
+    '缺少 value': 'dash.missingValue',
+    '未找到该令牌': 'dash.tokenNotFound',
+  };
+  return map[msg] ? t(map[msg]) : msg;
+}
+function actionToast(action, serverMsgText) {
+  const OK = {
+    start: 'dash.started', stop: 'dash.stoppedToast', restart: 'dash.restarted',
+    save: 'dash.saved', add: 'dash.tokenAdded', rotate: 'dash.primaryRotated',
+    remove: 'dash.tokenRemoved', setReadonly: 'dash.permUpdated',
+  }[action];
+  if (!OK) return serverMsg(serverMsgText);
+  let m = t(OK);
+  if (serverMsgText && serverMsgText.includes('已重启生效')) m += ' · ' + t('dash.restartedSuffix');
+  return m;
+}
+
+// Apply static (DOM-authored) strings + the <title> / <html lang> / lang button.
+function applyStaticI18n() {
+  document.documentElement.lang = locale === 'zh' ? 'zh-CN' : 'en';
+  document.title = t('app.title');
+  document.querySelectorAll('[data-i18n]').forEach((el) => {
+    const k = el.getAttribute('data-i18n');
+    if (k) el.textContent = t(k);
+  });
+  document.querySelectorAll('[data-i18n-ph]').forEach((el) => {
+    const k = el.getAttribute('data-i18n-ph');
+    if (k) el.placeholder = t(k);
+  });
+  const lb = $('btnLang');
+  if (lb) lb.textContent = locale === 'zh' ? 'EN' : '中文';
+  const tb = $('btnTheme');
+  if (tb) tb.setAttribute('aria-label', t('theme.aria'));
+}
+
 const $ = (id) => document.getElementById(id);
 let lastLogLen = 0;
+let lastStatus = null;
 
 function toast(msg) {
-  const t = $('toast'); t.textContent = msg; t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 1800);
+  const tEl = $('toast'); tEl.textContent = msg; tEl.classList.add('show');
+  setTimeout(() => tEl.classList.remove('show'), 1800);
 }
 function fmtUptime(s) {
   if (!s) return '—';
@@ -328,9 +615,9 @@ function fmtUptime(s) {
 function rel(ts) {
   if (!ts) return '—';
   const d = Math.floor((Date.now() - ts) / 1000);
-  if (d < 60) return d + ' 秒前';
-  if (d < 3600) return Math.floor(d / 60) + ' 分钟前';
-  return Math.floor(d / 3600) + ' 小时前';
+  if (d < 60) return t('dash.secAgo', { n: d });
+  if (d < 3600) return t('dash.minAgo', { n: Math.floor(d / 60) });
+  return t('dash.hourAgo', { n: Math.floor(d / 3600) });
 }
 
 async function post(path, body) {
@@ -339,11 +626,16 @@ async function post(path, body) {
     body: JSON.stringify(body || {}),
   });
   const j = await r.json().catch(() => ({}));
-  let msg = j.msg || (r.ok ? 'OK' : '失败');
+  let msg;
+  if (r.ok && j.ok) {
+    msg = actionToast(body && body.action, j.msg);
+  } else {
+    msg = serverMsg(j.msg) || (r.ok ? t('dash.ok') : t('dash.fail'));
+  }
   // 404 通常意味着控制台进程是旧的（在加这个接口之前就启动的）：界面是最新的（每次请求重读磁盘），
   // 但老进程没有该接口，于是静默失败。明确提示用户重启控制台。
   if (!r.ok && r.status === 404) {
-    msg = '接口不存在：控制台进程可能过旧，请在终端重启「node scripts/dashboard.mjs」并硬刷新页面';
+    msg = t('dash.staleConsole');
   }
   toast(msg);
   return j;
@@ -353,52 +645,45 @@ function render(status) {
   // 运行状态
   const on = status.running;
   $('statusBadge').className = 'badge ' + (on ? 'on' : 'off');
-  $('statusBadge').textContent = on ? '运行中' : '已停止';
-  $('rState').textContent = on ? '运行中' : '已停止';
+  $('statusBadge').textContent = on ? t('dash.running') : t('dash.stopped');
+  $('rState').textContent = on ? t('dash.running') : t('dash.stopped');
   $('rState').className = 'v ' + (on ? 'green' : 'red');
   $('rPid').textContent = status.pid ?? '—';
   $('rUptime').textContent = fmtUptime(status.uptimeSec);
-  $('rHost').textContent = status.config.host;
   $('rPort').textContent = status.config.port;
-  $('rMode').textContent = status.config.readonly ? '只读' : '读写';
-  $('rMode').className = 'v ' + (status.config.readonly ? 'amber' : 'green');
-  $('modePill').textContent = status.config.readonly ? 'READ-ONLY' : 'READ-WRITE';
 
-  // 配置表单（仅在未聚焦时回填，避免打断输入）
-  if (document.activeElement !== $('cHost')) $('cHost').value = status.config.host;
+  // 端口输入框（仅在未聚焦时回填，避免打断输入）
   if (document.activeElement !== $('cPort')) $('cPort').value = status.config.port;
-  if (document.activeElement !== $('cReadonly')) $('cReadonly').value = String(status.config.readonly);
 
   // 同伴（带身份类型标签与连接状态）
   const pl = $('peerList');
   if (!status.peers.length) {
-    pl.innerHTML = '<div class="empty">暂无同伴连接</div>';
+    pl.innerHTML = '<div class="empty">' + t('dash.noPeers') + '</div>';
   } else {
     const icon = { 'local-plugin': '🔌', 'remote-plugin': '🧩', 'remote-agent': '🤖' };
     pl.innerHTML = status.peers.map(p => {
       const ic = icon[p.type] || '🌐';
       const name =
-        p.type === 'local-plugin' ? '本机 Figma 插件'
-        : p.type === 'remote-plugin' ? '远程 Figma 插件'
-        : p.type === 'remote-agent' ? '远程智能体'
+        p.type === 'local-plugin' ? t('dash.localPlugin')
+        : p.type === 'remote-plugin' ? t('dash.remotePlugin')
+        : p.type === 'remote-agent' ? t('dash.remoteAgent')
         : p.ip;
-      const sub = [p.tokenLabel ? '令牌: ' + p.tokenLabel : null, p.ip, rel(p.lastSeen)]
-        .filter(Boolean).join(' · ');
+      const sub = [
+        p.tokenLabel ? t('dash.tokenLabel', { label: p.tokenLabel }) : null,
+        p.ip, rel(p.lastSeen),
+      ].filter(Boolean).join(' · ');
       const on = p.connected !== false;
       return `<div class="peer">
         <span class="dot ${on ? 'on' : 'off'}"></span>
         <div class="meta"><div class="lab">${ic} ${name}</div><div class="sub">${sub}</div></div>
-        <span class="v">${p.count} 次</span>
+        <span class="v">${t('dash.hits', { n: p.count })}</span>
       </div>`;
     }).join('');
   }
 
-  // 连接指引
+  // 连接指引（仅本机邀请串；远程命令按令牌在 renderTokens 里拼装）
   const g = status.guide;
   $('gInvite').textContent = g.invite;
-  $('gMcpRemote').textContent = g.mcpRemote;
-  $('gSsh').textContent = g.sshTunnel;
-  $('gSshUrl').textContent = g.sshMcpUrl;
 
   // 日志（仅追加新行，避免滚动跳动）
   if (status.logs.length > lastLogLen) {
@@ -422,15 +707,26 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => (
 function renderTokens(status) {
   const list = status.tokens || [];
   const el = $('tokenList');
-  if (!list.length) { el.innerHTML = '<div class="empty">尚未配置令牌</div>'; return; }
-  el.innerHTML = list.map((t, i) => {
-    const masked = t.value.length > 12 ? t.value.slice(0, 6) + '…' + t.value.slice(-4) : t.value;
-    const ro = t.readonly ? '<span class="ro-badge">只读</span>' : '';
-    const lbl = t.label ? t.label : '令牌 ' + (i + 1);
+  if (!list.length) { el.innerHTML = '<div class="empty">' + t('dash.noTokens') + '</div>'; return; }
+  const lanIp = status.guide.lanIp;
+  const port = status.config.port;
+  el.innerHTML = list.map((tk, i) => {
+    const masked = tk.value.length > 12 ? tk.value.slice(0, 6) + '…' + tk.value.slice(-4) : tk.value;
+    const ro = !!tk.readonly;
+    const lbl = tk.label ? tk.label : t('dash.tokenN', { n: i + 1 });
+    const roBadge = ro ? '<span class="ro-badge">' + t('dash.readonlyBadge') + '</span>' : '';
+    // 这个伙伴专属的远程 MCP 命令（嵌入该令牌）—— 对方直接复制即可用
+    const cmd = `npx -y mcp-remote http://${lanIp}:${port}/mcp --allow-http --header "x-figwright-token: ${tk.value}"`;
     return `<div class="token">
-      <div class="meta"><div class="lab">${esc(lbl)}${ro}</div><div class="val">${masked}</div></div>
-      <button class="mini" data-act="copy" data-val="${enc(t.value)}">复制</button>
-      <button class="mini danger" data-act="del" data-val="${enc(t.value)}">删除</button>
+      <div class="head">
+        <div class="meta"><div class="lab">${esc(lbl)}${roBadge}</div><div class="val">${masked}</div></div>
+        <div class="tok-actions">
+          <button class="mini" data-act="copy" data-val="${enc(tk.value)}">${t('dash.copy')}</button>
+          <button class="mini danger" data-act="del" data-val="${enc(tk.value)}">${t('dash.delete')}</button>
+          <label class="ro-toggle"><input type="checkbox" data-act="ro" data-val="${enc(tk.value)}" ${ro ? 'checked' : ''}/> ${t('token.readonly')}</label>
+        </div>
+      </div>
+      <div class="cmd"><span class="copy" data-cmd="${enc(cmd)}">${t('dash.copyCmd')}</span><span>${esc(cmd)}</span></div>
     </div>`;
   }).join('');
 }
@@ -439,7 +735,7 @@ function renderAudit(status) {
   const a = status.audit || [];
   const list = $('auditList');
   if (!a.length) {
-    list.innerHTML = '<div class="empty">暂无工具调用</div>';
+    list.innerHTML = '<div class="empty">' + t('dash.noCalls') + '</div>';
   } else {
     list.innerHTML = a.slice(0, 40).map(r => {
       const okCls = r.ok ? 'ok' : 'ok no';
@@ -476,6 +772,7 @@ async function poll() {
   try {
     const r = await fetch('/api/status');
     const status = await r.json();
+    lastStatus = status;
     render(status);
   } catch (e) { /* 控制台未就绪，下一轮重试 */ }
 }
@@ -484,10 +781,7 @@ async function poll() {
 $('btnStart').onclick = () => post('/api/control', { action: 'start' });
 $('btnStop').onclick = () => post('/api/control', { action: 'stop' });
 $('btnRestart').onclick = () => post('/api/control', { action: 'restart' });
-$('btnSave').onclick = () => post('/api/config', {
-  host: $('cHost').value, port: Number($('cPort').value),
-  readonly: $('cReadonly').value === 'true',
-});
+$('btnSavePort').onclick = () => post('/api/config', { action: 'save', port: Number($('cPort').value) });
 
 // 令牌管理
 $('btnAddToken').onclick = () => post('/api/tokens', {
@@ -500,21 +794,27 @@ $('tokenList').addEventListener('click', async (e) => {
   const act = btn.getAttribute('data-act');
   const val = decodeURIComponent(btn.getAttribute('data-val'));
   if (act === 'copy') {
-    try { await navigator.clipboard.writeText(val); toast('已复制令牌'); }
-    catch { toast('复制失败，请手动选择'); }
+    try { await navigator.clipboard.writeText(val); toast(t('dash.copiedToken')); }
+    catch { toast(t('dash.copyFailedManual')); }
   } else if (act === 'del') {
-    if (confirm('确定删除该令牌？使用该令牌的同伴将立即失去连接。')) {
+    if (confirm(t('dash.confirmDelete'))) {
       post('/api/tokens', { action: 'remove', value: val });
     }
   }
 });
+$('tokenList').addEventListener('change', async (e) => {
+  const cb = e.target.closest('input[data-act="ro"]');
+  if (!cb) return;
+  const val = decodeURIComponent(cb.getAttribute('data-val'));
+  post('/api/tokens', { action: 'setReadonly', value: val, readonly: cb.checked });
+});
 
 // 主题切换（持久化到 localStorage）
 const themeBtn = $('btnTheme');
-function applyTheme(t) {
-  document.documentElement.setAttribute('data-theme', t);
-  themeBtn.textContent = t === 'light' ? '☀️' : '🌙';
-  try { localStorage.setItem('fp-theme', t); } catch {}
+function applyTheme(th) {
+  document.documentElement.setAttribute('data-theme', th);
+  themeBtn.textContent = th === 'light' ? '☀️' : '🌙';
+  try { localStorage.setItem('fp-theme', th); } catch {}
 }
 let theme = 'dark';
 try { theme = localStorage.getItem('fp-theme') || 'dark'; } catch {}
@@ -523,16 +823,32 @@ themeBtn.onclick = () => applyTheme(
   document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light'
 );
 
-document.querySelectorAll('.copy').forEach((el) => {
-  el.onclick = async () => {
-    const which = el.getAttribute('data-copy');
-    const map = { invite: 'gInvite', mcpRemote: 'gMcpRemote', sshTunnel: 'gSsh' };
-    const txt = $(map[which]).textContent;
-    try { await navigator.clipboard.writeText(txt); toast('已复制到剪贴板'); }
-    catch { toast('复制失败，请手动选择'); }
-  };
+// 语言切换（持久化到 localStorage，自动检测默认值）
+const langBtn = $('btnLang');
+langBtn.onclick = () => {
+  setLocale(locale === 'zh' ? 'en' : 'zh');
+  applyStaticI18n();
+  if (lastStatus) render(lastStatus);
+};
+
+document.addEventListener('click', async (e) => {
+  const el = e.target.closest('.copy');
+  if (!el) return;
+  let txt = '';
+  const dcmd = el.getAttribute('data-cmd'); // 令牌专属命令（直接存字符串）
+  if (dcmd) txt = decodeURIComponent(dcmd);
+  else {
+    const which = el.getAttribute('data-copy'); // 本机邀请串等按元素 id 取文本
+    const map = { invite: 'gInvite' };
+    txt = $(map[which])?.textContent || '';
+  }
+  if (!txt) return;
+  try { await navigator.clipboard.writeText(txt); toast(t('dash.copiedClipboard')); }
+  catch { toast(t('dash.copyFailedManual')); }
 });
 
+// 初始化：先铺静态文案（标题/lang/<html>），再拉第一帧数据
+applyStaticI18n();
 poll();
 setInterval(poll, 2000);
 </script>

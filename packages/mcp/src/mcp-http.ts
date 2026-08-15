@@ -5,8 +5,21 @@ import { Readable } from 'node:stream';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/server';
 
-import { isAllowedHost } from './local-access.js';
+import { isAllowedHost, isLoopbackAddress } from './local-access.js';
 import type { TokenInfo, TokenRegistry } from './tokens.js';
+
+/**
+ * Whether a freshly-opened /mcp session should be read-only.
+ *
+ * A connection from this same machine (loopback) is always read-write — it is the user's own agent,
+ * so the dashboard's read-only setting never restricts it. A remote (LAN) peer defers to the matching
+ * token's effective permission (`tokenReadonly`); when the token carries no explicit override it is
+ * `undefined` (e.g. a loopback-bind setup with no token), which the caller — `createMcpServer` — then
+ * resolves against the server-wide read-only flag. In LAN mode every peer authenticates, so
+ * `tokenReadonly` is always a concrete boolean there.
+ */
+export const connectionReadonly = (clientIp: string | undefined, tokenReadonly?: boolean): boolean =>
+  isLoopbackAddress(clientIp) ? false : (tokenReadonly ?? false);
 
 /**
  * Remote MCP over Streamable HTTP.
@@ -14,8 +27,10 @@ import type { TokenInfo, TokenRegistry } from './tokens.js';
  * figwright's MCP interface has historically been stdio-only: the agent that connects must live on
  * the same machine as the Figma plugin. This endpoint serves the same McpServer over HTTP so an
  * agent on another machine — for example a teammate's VSCode on the LAN — can connect to *this*
- * machine's Figma plugin and read (figma-to-code) or read+write (code-to-figma) the file, governed
- * by the FIGWRIGHT_READONLY flag.
+ * machine's Figma plugin and read (figma-to-code) or read+write (code-to-figma) the file. A
+ * connection from this same machine (loopback) is always read+write; a remote (LAN) peer is
+ * governed by the matching token's effective permission, which falls back to the FIGWRIGHT_READONLY
+ * flag.
  *
  * It rides the same Node HTTP server the relay and leader endpoints already use (so it shares the
  * port and the FIGWRIGHT_HOST bind), and reuses the LAN token: a network-reachable socket needs an
@@ -170,7 +185,10 @@ export const attachMcpHttp = (server: HttpServer, deps: McpHttpDeps): (() => voi
       if (typeof sessionId === 'string' && sessions.has(sessionId)) {
         transport = sessions.get(sessionId);
       } else {
-        transport = await createSession(info?.readonly);
+        // Local (loopback) connections are this machine's own agent and are always read-write,
+        // regardless of the dashboard's read-only setting. Remote (LAN) peers stay governed by the
+        // matching token's effective permission (which falls back to the server-wide read-only flag).
+        transport = await createSession(connectionReadonly(clientIp, info?.readonly));
       }
 
       // Buffer the body once so we can both audit it (extract the tool name) and forward it.

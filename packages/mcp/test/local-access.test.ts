@@ -7,7 +7,7 @@ vi.mock('node:os', () => ({
 
 import { networkInterfaces } from 'node:os';
 
-import { isAllowedHost, localInterfaceHosts } from '../src/local-access.js';
+import { isAllowedHost, isLoopbackAddress, localInterfaceHosts } from '../src/local-access.js';
 
 const mockedInterfaces = networkInterfaces as unknown as ReturnType<typeof vi.fn>;
 
@@ -66,5 +66,20 @@ describe('isAllowedHost', () => {
   it('rejects an absent or empty Host header', () => {
     expect(isAllowedHost(undefined)).toBe(false);
     expect(isAllowedHost('')).toBe(false);
+  });
+});
+
+describe('isLoopbackAddress', () => {
+  it('recognises the IPv4 and IPv6 loopback forms', () => {
+    expect(isLoopbackAddress('127.0.0.1')).toBe(true);
+    expect(isLoopbackAddress('::1')).toBe(true);
+    expect(isLoopbackAddress('::ffff:127.0.0.1')).toBe(true);
+    expect(isLoopbackAddress('localhost')).toBe(true);
+  });
+
+  it('rejects non-loopback and absent addresses', () => {
+    expect(isLoopbackAddress('192.168.23.135')).toBe(false);
+    expect(isLoopbackAddress('10.0.0.5')).toBe(false);
+    expect(isLoopbackAddress(undefined)).toBe(false);
   });
 });

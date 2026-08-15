@@ -4,6 +4,8 @@
 // the whole thing is capped so a huge tree can't lock up the panel; the digest still reports the
 // real size that crossed the wire.
 
+import { t } from '../i18n/index.js';
+
 /** A captured, display-ready view of a tool result as it was sent to the LLM. */
 export interface ActivityPayload {
   /** Pretty-printed JSON with long binary-ish strings elided and the whole thing capped. */
@@ -27,7 +29,7 @@ const byteLength = (s: string): number =>
 
 const elideLongStrings = (_key: string, value: unknown): unknown => {
   if (typeof value === 'string' && value.length > LONG_STRING_THRESHOLD) {
-    return `‹${value.length.toLocaleString()} chars elided›`;
+    return t('payload.elided', { n: value.length.toLocaleString() });
   }
   return value;
 };
@@ -49,6 +51,6 @@ export const summarizePayload = (result: unknown): ActivityPayload => {
   }
 
   const truncated = json.length > PREVIEW_CAP;
-  const preview = truncated ? `${json.slice(0, PREVIEW_CAP)}\n… (truncated for display)` : json;
+  const preview = truncated ? `${json.slice(0, PREVIEW_CAP)}\n${t('payload.truncatedPreview')}` : json;
   return { preview, bytes, truncated };
 };

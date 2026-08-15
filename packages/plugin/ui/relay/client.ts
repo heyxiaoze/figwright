@@ -20,6 +20,7 @@ import {
 
 import { extractNodeIds } from './node-ids.js';
 import { summarizePayload } from './payload.js';
+import { t } from '../i18n/index.js';
 import {
   type ActivityStatus,
   initialRelayState,
@@ -184,8 +185,7 @@ export class RelayClient {
       // server starts, and if it never does, a foreign process on that port is the likely culprit.
       lastError:
         this.state.lastError ??
-        `no Figwright server on :${this.opts.ports.join(', ')} yet — it connects automatically once ` +
-          `the MCP server starts; if it never does, another process may be holding that port`,
+        t('relay.noServer', { ports: this.opts.ports.join(', ') }),
     });
     // A refusal is terminal: the way out is re-importing the plugin, which builds a fresh client.
     if (!this.stopped && !this.refused) void this.runReconnectLoop();
@@ -291,7 +291,7 @@ export class RelayClient {
       };
 
       ws.onerror = () => {
-        fail(`socket error on port ${port}`);
+        fail(t('relay.socketErrorPort', { port }));
       };
 
       ws.onmessage = (msgEvt: MessageEvent) => {
@@ -299,7 +299,7 @@ export class RelayClient {
         try {
           envelope = decodeEnvelope(msgEvt.data as ArrayBuffer);
         } catch (err) {
-          fail(`decode failure: ${(err as Error).message}`);
+          fail(t('relay.decodeFailure', { message: (err as Error).message }));
           return;
         }
 
@@ -314,7 +314,7 @@ export class RelayClient {
             // failed attempt and surfaced in the header until the plugin is replaced.
             versionNotice: this.refused ? envelope.error.message : null,
           });
-          fail(`hello rejected: ${envelope.error.message}`);
+          fail(t('relay.helloRejected', { message: envelope.error.message }));
           return;
         }
         if (envelope.kind !== 'res') {
@@ -349,7 +349,7 @@ export class RelayClient {
       };
 
       ws.onclose = () => {
-        fail(`socket closed before hello on port ${port}`);
+        fail(t('relay.socketClosed', { port }));
       };
     });
   }
@@ -386,7 +386,7 @@ export class RelayClient {
       if (!this.stopped) void this.runReconnectLoop();
     };
     ws.onerror = () => {
-      this.update({ lastError: 'socket error' });
+      this.update({ lastError: t('relay.socketError') });
     };
   }
 
@@ -408,7 +408,7 @@ export class RelayClient {
     );
     const handler = this.toolHandler;
     if (handler === null) {
-      const message = `no tool handler registered (method=${method})`;
+      const message = t('relay.noHandler', { method });
       this.opts.log(`[relay-client] ${message}`);
       this.settle(id, 'error', { error: message });
       ws.send(

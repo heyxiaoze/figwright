@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { usePanelWindow } from '../composables/usePanelWindow.js';
+import { useI18n } from '../i18n/index.js';
 
 const { onResizeStart, onResizeMove, onResizeEnd } = usePanelWindow();
+const { t } = useI18n();
 </script>
 
 <!--
@@ -30,7 +32,7 @@ const { onResizeStart, onResizeMove, onResizeEnd } = usePanelWindow();
 <template>
   <div
     class="absolute right-0 bottom-0 size-4 cursor-nwse-resize touch-none text-faint transition-colors duration-150 hover:text-fg"
-    title="Drag to resize"
+    :title="t('grip.title')"
     @pointerdown="onResizeStart"
     @pointermove="onResizeMove"
     @pointerup="onResizeEnd"
