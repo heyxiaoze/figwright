@@ -19,7 +19,7 @@
  *   DASH_PORT=3057 node scripts/dashboard.mjs   # 自定义控制台端口
  */
 import { createServer } from 'node:http';
-import { spawn } from 'node:child_process';
+import { spawn, execSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +32,21 @@ const DIST_ENTRY = join(REPO_ROOT, 'packages/mcp/dist/index.mjs');
 const CONFIG_PATH = join(__dirname, '.figwright-dashboard.json');
 const DASH_HTML = join(__dirname, 'dashboard.html');
 const DASH_PORT = Number(process.env.DASH_PORT ?? 3056);
+
+// Figwright-Plus version shown as a small badge after the console title. Format mirrors the plugin
+// panel and the git release: `v<MAJOR>.<MINOR>-<short-git-sha>`. MINOR starts at 05 and increments
+// by 1 on each release; the commit hash is read live so the console always matches the build it runs from.
+const APP_MAJOR = 0;
+const APP_MINOR = '05'; // bump +1 on each release
+function appVersion() {
+  let sha = 'dev';
+  try {
+    sha = execSync('git rev-parse --short HEAD', { cwd: REPO_ROOT, encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+  } catch {
+    // leave 'dev'
+  }
+  return `v${APP_MAJOR}.${APP_MINOR}-${sha}`;
+}
 
 // 默认值：沿用已分发给对方/插件的 token 作为 primary，避免改了以后连不上。
 // tokens 是多令牌数组，每个 { value, label?, readonly? }；readonly 由各令牌独立控制远端权限。
@@ -286,8 +301,11 @@ const server = createServer(async (req, res) => {
       res.end('dashboard.html 缺失');
       return;
     }
+    let html = readFileSync(DASH_HTML, 'utf8');
+    const versionBase = `v${APP_MAJOR}.${APP_MINOR}`;
+    html = html.replace(versionBase, appVersion()); // stamp the live version into the badge
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(readFileSync(DASH_HTML));
+    res.end(html);
     return;
   }
 

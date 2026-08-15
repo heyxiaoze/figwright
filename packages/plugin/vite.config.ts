@@ -5,20 +5,27 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
 
 import { execSync } from 'node:child_process';
 
-// Dynamic version: v0.1.0-beta-<short-git-sha>, refreshed on every build. The `.0` patch is required
-// so the string is valid semver (MAJOR.MINOR.PATCH-prerelease) — the shared version comparator in
-// `packages/shared/src/version.ts` rejects anything that doesn't parse, which would otherwise mark
-// every result as "unverified".
+// Figwright-Plus version, baked into the plugin bundle and shown in the panel footer / debug tab.
+// Format: `<MAJOR>.<MINOR>-<short-git-sha>`, displayed as `v0.05-8de3f48`.
+//   - MAJOR stays 0 until the major version is bumped (the user will say when).
+//   - MINOR starts at 05 and increments by 1 on every release (05 → 06 → … → 10 → 11 …).
+//   - The commit hash is refreshed on every build, so the panel always reports the exact build.
+// Skew detection was removed (checkPluginCompatibility now always returns true), so this string is
+// display-only — it no longer has to satisfy the semver comparator in packages/shared/src/version.ts.
+const MAJOR = 0;
+const MINOR = '05'; // bump +1 on each release
+
 function buildVersion(): string {
+  let sha = 'unknown';
   try {
-    const sha = execSync('git rev-parse --short HEAD', {
+    sha = execSync('git rev-parse --short HEAD', {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'ignore'],
     }).trim();
-    return `0.1.0-beta-${sha}`;
   } catch {
-    return '0.1.0-beta-unknown';
+    // leave sha as 'unknown'
   }
+  return `${MAJOR}.${MINOR}-${sha}`;
 }
 
 const version = buildVersion();

@@ -146,6 +146,14 @@
     background: var(--accent); box-shadow: 0 0 0 4px rgba(89,86,233,.18);
   }
   .head-right { display: flex; align-items: center; gap: var(--sp-2); }
+  .title-wrap { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
+  .ver-badge {
+    flex: none; height: 20px; display: inline-flex; align-items: center;
+    padding: 0 var(--sp-2); border-radius: 999px;
+    background: var(--surface-2); border: 1px solid var(--line);
+    color: var(--muted); font-family: var(--font-mono); font-size: var(--fs-2xs);
+    font-weight: 600; letter-spacing: .02em; white-space: nowrap;
+  }
 
   /* status pill — same height as the toggle buttons */
   .badge {
@@ -290,7 +298,10 @@
 <body>
 <div class="wrap">
   <header>
-    <h1 data-i18n="app.title">Figwright-Plus 控制台</h1>
+    <div class="title-wrap">
+      <h1 data-i18n="app.title">Figwright-Plus 控制台</h1>
+      <span id="verBadge" class="ver-badge">v0.05</span>
+    </div>
     <div class="head-right">
       <button id="btnLang" class="theme-btn" data-i18n="lang.btn" aria-label="切换语言">EN</button>
       <button id="btnTheme" class="theme-btn" aria-label="切换亮/暗主题">🌙</button>
