@@ -37,7 +37,7 @@ const DASH_PORT = Number(process.env.DASH_PORT ?? 3056);
 // panel and the git release: `v<MAJOR>.<MINOR>-<short-git-sha>`. MINOR starts at 05 and increments
 // by 1 on each release; the commit hash is read live so the console always matches the build it runs from.
 const APP_MAJOR = 0;
-const APP_MINOR = '05'; // bump +1 on each release
+const APP_MINOR = '06'; // bump +1 on each release
 function appVersion() {
   let sha = 'dev';
   try {
@@ -57,6 +57,9 @@ const DEFAULT_CONFIG = {
   host: '0.0.0.0',
   port: 3055,
   tokens: [{ value: 'Psk7WEW2FoheR1zMGOoMr-fQtaqViIhG', label: 'primary' }],
+  // 资源传送：默认内联（save 工具直接回 base64）。可切到 webdav / sftp，配置后远程伙伴用
+  // fetch_asset(token) 取图，凭据仅存于服务端、不泄露给伙伴。凭据为机密，存于本 gitignored 配置文件。
+  transfer: { mode: 'inline' },
 };
 
 const generateToken = () => randomBytes(24).toString('base64url');
@@ -111,8 +114,14 @@ function recordPeer(ip, patch) {
   peers.set(ip, next);
 }
 
+// 本地时间 HH:MM:SS（服务端跑在用户本机 Mac，与查看者同一时区；不再用 toISOString 的 UTC）
+function tsLocal() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
 function pushLog(line) {
-  const ts = new Date().toISOString().slice(11, 19);
+  const ts = tsLocal();
   logLines.push(`[${ts}] ${line}`);
   if (logLines.length > 500) logLines.shift();
 
@@ -166,6 +175,8 @@ function startServer() {
     FIGWRIGHT_TOKENS: JSON.stringify(config.tokens ?? []),
     FIGWRIGHT_TOKEN: primaryTokenOf(config),
     // 不再下发 FIGWRIGHT_READONLY：本机永远双向；远端权限由各令牌的 readonly 决定。
+    // 资源传送配置：以 JSON 传给 server（FIGWRIGHT_TRANSFER），server 据此初始化 TransferManager。
+    FIGWRIGHT_TRANSFER: JSON.stringify(config.transfer ?? { mode: 'inline' }),
   };
   // 去掉可能污染子进程的 NODE_OPTIONS（如某些环境带 --use-system-ca，figwright 自带 node 不认）
   delete env.NODE_OPTIONS;
@@ -266,6 +277,138 @@ function buildGuide() {
 }
 
 // ----------------------------------------------------------------------------
+// 资源传送连通性测试（WebDAV / SFTP）
+// 仅在用户点「测试连接」时运行，用控制台填写的凭据（未保存也可测）探测远端是否可达、
+// 认证是否有效、以及暂存所需的写入权限是否具备。凭据不出本机。
+// ----------------------------------------------------------------------------
+async function loadSftpClient() {
+  // dashboard.mjs 在 scripts/，ssh2-sftp-client 装在 @figwright/mcp 包；优先按 mcp 包路径解析，
+  // 失败再回退裸名（若被 hoist）。两者都不行则给出明确的安装提示。
+  const candidates = [
+    'ssh2-sftp-client',
+    join(REPO_ROOT, 'packages/mcp/node_modules/ssh2-sftp-client'),
+  ];
+  for (const spec of candidates) {
+    try {
+      const mod = await import(spec);
+      if (mod.default) return mod.default;
+      if (mod.Client) return mod.Client;
+    } catch {
+      /* try next */
+    }
+  }
+  throw new Error('SFTP 依赖未安装：请先在 @figwright/mcp 包运行 pnpm --filter @figwright/mcp add ssh2-sftp-client');
+}
+
+async function testWebDav(cfg) {
+  const url = String(cfg.url ?? '').trim().replace(/\/+$/, '');
+  const username = String(cfg.username ?? '').trim();
+  const password = String(cfg.password ?? '');
+  const sub = String(cfg.path ?? '').trim().replace(/^\/+|\/+$/g, '');
+  if (!/^https?:\/\//i.test(url)) return { ok: false, error: 'WebDAV URL 无效（需以 http:// 或 https:// 开头）' };
+  if (!username || !password) return { ok: false, error: '缺少用户名或密码' };
+
+  const target = [url, sub].filter(Boolean).join('/');
+  const auth = 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10000);
+
+  const classify = (status) => {
+    if (status === 401 || status === 403) return { ok: false, error: '认证失败（401/403）：用户名或密码错误' };
+    if (status === 404) return { ok: false, error: '路径不存在（404）：检查 URL 或子目录是否正确' };
+    if (status === 405) return 'propfind-unsupported';
+    if (status >= 400) return { ok: false, error: `服务器返回 ${status}` };
+    return 'ok';
+  };
+
+  try {
+    // 1) 读探针：探测可达 + 认证
+    let probe;
+    try {
+      probe = await fetch(target, {
+        method: 'PROPFIND',
+        headers: { Authorization: auth, Depth: '0', 'Content-Type': 'application/xml; charset=utf-8' },
+        body: '<?xml version="1.0"?><propfind xmlns="DAV:"><prop><resourcetype/></prop></propfind>',
+        signal: ctrl.signal,
+        redirect: 'manual',
+      });
+    } catch (e) {
+      if (e.name === 'AbortError') return { ok: false, error: '连接超时（10s）：检查 URL 与网络' };
+      const code = e.cause?.code || e.code || '';
+      return { ok: false, error: '无法连接：' + (code || e.message) };
+    }
+    const r1 = classify(probe.status);
+    if (r1 !== 'ok' && r1 !== 'propfind-unsupported') return r1;
+
+    // 2) 写探针：暂存需要可写，放一个临时文件再删
+    const probeKey = '.figwright-test-' + randomBytes(6).toString('hex');
+    const putUrl = [url, sub, probeKey].filter(Boolean).join('/');
+    const parent = putUrl.slice(0, putUrl.lastIndexOf('/'));
+    await fetch(parent, { method: 'MKCOL', headers: { Authorization: auth }, signal: ctrl.signal }).catch(() => {});
+    let putRes;
+    try {
+      putRes = await fetch(putUrl, {
+        method: 'PUT',
+        headers: { Authorization: auth, 'Content-Type': 'application/octet-stream' },
+        body: Buffer.from('figwright-connection-test'),
+        signal: ctrl.signal,
+      });
+    } catch (e) {
+      if (e.name === 'AbortError') return { ok: false, error: '写入超时（10s）' };
+      return { ok: false, error: '写入失败：' + (e.cause?.code || e.message) };
+    }
+    if (!putRes.ok) {
+      if (putRes.status === 401 || putRes.status === 403)
+        return { ok: false, error: '认证失败（写入被拒 401/403）' };
+      return { ok: false, error: `写入被拒（${putRes.status}）：账号可能无写入权限，暂存需要可写` };
+    }
+    await fetch(putUrl, { method: 'DELETE', headers: { Authorization: auth }, signal: ctrl.signal }).catch(() => {});
+    await fetch(parent, { method: 'DELETE', headers: { Authorization: auth }, signal: ctrl.signal }).catch(() => {});
+    return { ok: true, error: '连接成功，且可写入远程目录' };
+  } catch (e) {
+    return { ok: false, error: '测试异常：' + (e.message || String(e)) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function testSftp(cfg) {
+  const host = String(cfg.host ?? '').trim();
+  const username = String(cfg.username ?? '').trim();
+  const password = String(cfg.password ?? '');
+  const port = Number.isInteger(cfg.port) ? cfg.port : 22;
+  const remoteDir = String(cfg.path ?? '').trim().replace(/^\/+|\/+$/g, '') || '.';
+  if (!host) return { ok: false, error: '缺少主机地址' };
+  if (!username || !password) return { ok: false, error: '缺少用户名或密码' };
+
+  let Client;
+  try {
+    Client = await loadSftpClient();
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+  const client = new Client();
+  try {
+    await client.connect({ host, port, username, password, timeout: 10000 });
+    const list = await client.list(remoteDir);
+    const probeKey = '.figwright-test-' + randomBytes(6).toString('hex');
+    const remotePath = '/' + [remoteDir === '.' ? '' : remoteDir, probeKey].filter(Boolean).join('/');
+    await client.put(Buffer.from('figwright-connection-test'), remotePath);
+    await client.delete(remotePath);
+    return { ok: true, error: `连接成功（目录 ${list.length} 项），且可写入远程目录` };
+  } catch (e) {
+    const msg = e.message || String(e);
+    if (/auth|password|denied|permission|bad/i.test(msg))
+      return { ok: false, error: '认证失败：用户名或密码错误' };
+    if (/getaddrinfo|ENOTFOUND|ECONNREFUSED|timed out|timeout|ETIMEDOUT/i.test(msg))
+      return { ok: false, error: '连接失败：检查主机 / 端口 / 网络（' + msg + '）' };
+    return { ok: false, error: 'SFTP 测试失败：' + msg };
+  } finally {
+    await client.end().catch(() => {});
+  }
+}
+
+// ----------------------------------------------------------------------------
 // HTTP 服务
 // ----------------------------------------------------------------------------
 function sendJson(res, obj, code = 200) {
@@ -354,6 +497,26 @@ const server = createServer(async (req, res) => {
     // 仅保留端口可改；host 固定 0.0.0.0（LAN），全局 readonly 已从控制台移除（由令牌控制）。
     if (Number.isInteger(body.port) && body.port > 0 && body.port <= 65535)
       config.port = body.port;
+    // 资源传送配置：合并模式与凭据（凭据来自控制台填写、存于本配置文件，不出现在 UI 外）。
+    if (body.transfer && typeof body.transfer === 'object') {
+      const t = body.transfer;
+      config.transfer = {
+        mode: t.mode === 'webdav' || t.mode === 'sftp' ? t.mode : 'inline',
+        ...(t.webdav && typeof t.webdav === 'object'
+          ? { webdav: { url: String(t.webdav.url ?? ''), path: t.webdav.path ? String(t.webdav.path) : undefined, username: String(t.webdav.username ?? ''), password: String(t.webdav.password ?? '') } }
+          : {}),
+        ...(t.sftp && typeof t.sftp === 'object'
+          ? { sftp: { host: String(t.sftp.host ?? ''), port: Number.isInteger(t.sftp.port) ? t.sftp.port : undefined, path: t.sftp.path ? String(t.sftp.path) : undefined, username: String(t.sftp.username ?? ''), password: String(t.sftp.password ?? '') } }
+          : {}),
+      };
+      // 凭据缺失时不启用远端模式，回退内联
+      if (config.transfer.mode !== 'inline') {
+        const c = config.transfer.mode === 'webdav' ? config.transfer.webdav : config.transfer.sftp;
+        if (!c || !c.username || !c.password || (config.transfer.mode === 'webdav' && !c.url) || (config.transfer.mode === 'sftp' && !c.host)) {
+          config.transfer = { mode: 'inline' };
+        }
+      }
+    }
     saveConfig();
     let r = { ok: true, msg: '已保存' };
     if (serverProc) {
@@ -361,6 +524,18 @@ const server = createServer(async (req, res) => {
       r.msg = '已保存并重启 server 生效';
     }
     sendJson(res, r);
+    return;
+  }
+
+  // 测试资源传送配置（WebDAV / SFTP 连通性 + 认证 + 写入权限）
+  if (req.method === 'POST' && url.pathname === '/api/test-transfer') {
+    const body = await readBody(req);
+    const mode = body.mode;
+    let r;
+    if (mode === 'webdav') r = await testWebDav(body.webdav || {});
+    else if (mode === 'sftp') r = await testSftp(body.sftp || {});
+    else r = { ok: false, error: '请先选择 WebDAV 或 SFTP 模式' };
+    sendJson(res, r, r.ok ? 200 : 400);
     return;
   }
 

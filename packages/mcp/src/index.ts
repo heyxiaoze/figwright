@@ -34,6 +34,8 @@ import { formatPingResult, handlePing, pingTool } from './tools/ping.js';
 import { ALL_TOOL_SPECS, filterToolSpecs, WRITE_TOOL_NAMES } from './tools/registry.js';
 import { handleSaveImageFills, SAVE_IMAGE_FILLS_TOOL_NAME } from './tools/save-image-fills.js';
 import { handleSaveScreenshots, SAVE_SCREENSHOTS_TOOL_NAME } from './tools/save-screenshots.js';
+import { FETCH_ASSET_TOOL_NAME, assetContent } from './tools/fetch-asset.js';
+import { getTransferManager, initTransferManager } from './transfer.js';
 import { handleScanComponents, SCAN_COMPONENTS_TOOL_NAME } from './tools/scan-components.js';
 import { captureSkew, withSkewNotice } from './tools/skew-notice.js';
 import { handleTokenMap, TOKEN_MAP_TOOL_NAME } from './tools/token-map.js';
@@ -127,6 +129,10 @@ if (LAN_MODE) {
     serverReadonly: READONLY,
   });
 }
+
+// Resource transfer (WebDAV/SFTP staging) for remote partners. No-op / null unless FIGWRIGHT_TRANSFER
+// is set — in inline mode the save tools fall back to returning base64 directly.
+initTransferManager(process.env.FIGWRIGHT_TRANSFER);
 
 // The display token for connection guides (plugin invite / mcp-remote command) and for the follower's
 // own /rpc auth to the leader. null in loopback mode where no token is expected.
@@ -238,6 +244,18 @@ const SPECIAL_HANDLERS: Record<string, ToolHandler> = {
   [TOKEN_MAP_TOOL_NAME]: async args => textResult(await handleTokenMap(dispatch, args)),
   [ICON_MAP_TOOL_NAME]: async args => textResult(await handleIconMap(await routedDispatch(), args)),
   [DESIGN_DIFF_TOOL_NAME]: async args => textResult(await handleDesignDiff(dispatch, args)),
+  // Remote partners redeem a one-time asset token here: the server pulls the staged file from its
+  // WebDAV/SFTP store (credentials never leave the server), returns the bytes, and deletes the copy.
+  [FETCH_ASSET_TOOL_NAME]: async args => {
+    const mgr = getTransferManager();
+    if (!mgr) return textResult({ ok: false, error: 'resource transfer not configured on server' });
+    const token = typeof args.token === 'string' ? args.token : '';
+    if (!token) return textResult({ ok: false, error: 'missing token' });
+    const res = await mgr.fetch(token);
+    if (!res)
+      return textResult({ ok: false, error: 'asset not found or expired (token already used or timed out)' });
+    return { content: assetContent(res.name, res.bytes) };
+  },
   // The guarded public path: arms the plugin's node-count bail (budget: true) and applies the
   // payload-size net + below-full note. Internal dispatches (design_diff, component/icon map) call
   // the tool directly and stay raw.

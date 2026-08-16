@@ -11,6 +11,7 @@ import {
 import { z } from 'zod';
 
 import { GET_SCREENSHOT_TOOL_NAME } from './get-screenshot.js';
+import { getTransferManager } from '../transfer.js';
 import type { ToolSpec } from './spec.js';
 
 export const SAVE_SCREENSHOTS_TOOL_NAME = 'save_screenshots';
@@ -28,9 +29,16 @@ const inputSchema = z.object({
 export const saveScreenshotsTool: ToolSpec = {
   name: SAVE_SCREENSHOTS_TOOL_NAME,
   description:
-    'Export nodes and write them to disk under outDir: { saved: [{ nodeId, format, path, recovered?, empty? }] }. ' +
+    'Export nodes and write them to disk under outDir: { saved: [{ nodeId, format, path, base64, assetToken?, recovered?, empty? }] }. ' +
     'format is PNG (default) / JPG / SVG; scale applies to raster formats (default 1). ' +
-    'path is null for missing or non-exportable nodes. Nodes that are fully clipped or off-canvas ' +
+    'path is null for missing or non-exportable nodes. Each entry also returns `base64` — the original ' +
+    'encoded bytes. When THIS MCP CLIENT RUNS ON A DIFFERENT MACHINE than the server (a remote partner ' +
+    'connected over the LAN/streamable-MCP), `path` points at the server’s disk and is unreachable from ' +
+    'your machine. Retrieve the file in one of two ways: (1) if the server is configured with a ' +
+    'WebDAV/SFTP transfer target, each entry includes `assetToken` — call fetch_asset(token) to pull the ' +
+    'bytes over the MCP connection (credentials never leave the server; the staged copy is deleted on ' +
+    'fetch), then write them into your own code project; (2) otherwise decode `base64` and write the ' +
+    'file to your own `outDir`. Nodes that are fully clipped or off-canvas ' +
     "(e.g. a carousel's edge items) are auto-recovered at their intrinsic bounds and flagged recovered:true. " +
     'empty:true means the node genuinely renders nothing even unclipped (hidden / no content) so the file is blank. ' +
     'Files are named after a sanitized node id.',
@@ -60,11 +68,29 @@ export const writeScreenshots = async (
         ...(img.recovered === true ? { recovered: true as const } : {}),
       };
       if (img.base64 === null)
-        return { nodeId: img.nodeId, format: img.format, path: null, ...flags };
+        return { nodeId: img.nodeId, format: img.format, path: null, base64: null, ...flags };
       const ext = EXTENSIONS[img.format] ?? img.format.toLowerCase();
       const path = join(dir, `${sanitize(img.nodeId)}.${ext}`);
       await writeFile(path, Buffer.from(img.base64, 'base64'));
-      return { nodeId: img.nodeId, format: img.format, path, ...flags };
+      const result: SavedScreenshot = {
+        nodeId: img.nodeId,
+        format: img.format,
+        path,
+        base64: img.base64,
+        ...flags,
+      };
+      // Staged transfer: if a WebDAV/SFTP target is configured, upload the bytes and hand the partner
+      // a one-time token (credentials stay server-side; they fetch via fetch_asset and the copy is
+      // deleted). Staging is best-effort — on any failure the partner still has `base64` to decode.
+      const mgr = getTransferManager();
+      if (mgr) {
+        try {
+          result.assetToken = await mgr.stage(`${sanitize(img.nodeId)}.${ext}`, Buffer.from(img.base64, 'base64'));
+        } catch {
+          /* transfer unavailable — fall back to inline base64 */
+        }
+      }
+      return result;
     }),
   );
 

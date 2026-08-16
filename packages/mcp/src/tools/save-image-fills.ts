@@ -10,6 +10,7 @@ import type {
 } from '@figwright/shared';
 import { z } from 'zod';
 
+import { getTransferManager } from '../transfer.js';
 import type { ToolSpec } from './spec.js';
 
 export const SAVE_IMAGE_FILLS_TOOL_NAME = 'save_image_fills';
@@ -27,7 +28,7 @@ export const saveImageFillsTool: ToolSpec = {
     "Extract the ORIGINAL image bytes behind each node's IMAGE fills and write them to disk under " +
     'outDir — the source asset exactly as uploaded (no mask, clip, crop, scale, or effects applied), ' +
     'unlike save_screenshots / get_screenshot which re-render the composited node. Returns ' +
-    '{ nodes: [{ nodeId, nodeName?, parentName?, images: [{ index, imageHash, format, path, relativePath?, width?, height?, scaleMode? }], ' +
+    '{ nodes: [{ nodeId, nodeName?, parentName?, images: [{ index, imageHash, format, path, relativePath?, base64, assetToken?, width?, height?, scaleMode? }], ' +
     'mixed? }] }. File names are lowercased and restricted to [a-z0-9-] (spaces and any other ' +
     'character collapse to a single hyphen). Files follow the structured convention `IMG-[location]-[name][-index].[ext]` where ' +
     'location is the parent Figma layer (parentName) and name is this layer (nodeName) — e.g. ' +
@@ -39,7 +40,15 @@ export const saveImageFillsTool: ToolSpec = {
     'bytes (PNG / JPG / GIF / WEBP, or BIN if unrecognized). path (and relativePath) is null when the ' +
     'fill image cannot be resolved; images:[] means the ' +
     'node has no image fill; mixed:true means the node fills are per-text-range and were not ' +
-    'enumerated. For a rendered/composited raster use save_screenshots; for a vector node use export_pdf.',
+    'enumerated. Each image ALSO returns `base64` — the original encoded bytes. When THIS MCP CLIENT ' +
+    'RUNS ON A DIFFERENT MACHINE than the server (a remote partner connected over the LAN/streamable-MCP), ' +
+    '`path`/`relativePath` point at the server’s disk and are unreachable from your machine. Retrieve ' +
+    'the file in one of two ways: (1) if the server is configured with a WebDAV/SFTP transfer target, ' +
+    'each image includes `assetToken` — call fetch_asset(token) to pull the bytes over the MCP ' +
+    'connection (credentials never leave the server; the staged copy is deleted on fetch), then write ' +
+    'them into your own code project; (2) otherwise decode `base64` and write the bytes to your own ' +
+    "machine’s asset directory so the file exists locally. For a rendered/composited raster use " +
+    'save_screenshots; for a vector node use export_pdf.',
   inputSchema,
   kind: 'local',
 };
@@ -93,9 +102,15 @@ const sanitize = (name: string): string => {
 };
 
 /** Carry the identifying/display fields through from the plugin result to the write result. */
-const carry = (img: NodeImageFills['images'][number]): Omit<SavedImageFill, 'format' | 'path'> => ({
+const carry = (img: NodeImageFills['images'][number]): Omit<
+  SavedImageFill,
+  'format' | 'path' | 'relativePath'
+> => ({
   index: img.index,
   imageHash: img.imageHash,
+  // Carried so a remote partner (whose machine can't see this server's `path`) can decode + write
+  // the bytes on its own disk. Null when the fill couldn't be resolved (matches `path: null`).
+  base64: img.base64,
   ...(img.width !== undefined ? { width: img.width } : {}),
   ...(img.height !== undefined ? { height: img.height } : {}),
   ...(img.scaleMode !== undefined ? { scaleMode: img.scaleMode } : {}),
@@ -172,6 +187,29 @@ export const writeImageFills = async (
   });
 
   await Promise.all([...toWrite].map(([path, buf]) => writeFile(path, buf)));
+
+  // Staged transfer: if a WebDAV/SFTP target is configured, upload each unique file once and mint a
+  // one-time token the remote partner redeems via fetch_asset (credentials stay server-side; the
+  // staged copy is deleted on fetch). Best-effort — on failure the partner still has `base64`.
+  const mgr = getTransferManager();
+  if (mgr) {
+    const pathToToken = new Map<string, string>();
+    await Promise.all(
+      [...toWrite].map(async ([p, buf]) => {
+        try {
+          pathToToken.set(p, await mgr.stage(p.split('/').pop() ?? 'image', buf));
+        } catch {
+          /* transfer unavailable — fall back to inline base64 */
+        }
+      }),
+    );
+    for (const node of outNodes) {
+      for (const img of node.images) {
+        if (img.path && pathToToken.has(img.path)) img.assetToken = pathToToken.get(img.path)!;
+      }
+    }
+  }
+
   return { nodes: outNodes };
 };
 

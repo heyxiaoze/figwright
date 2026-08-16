@@ -13,6 +13,7 @@ import {
   type ToolDispatcher,
   writeImageFills,
 } from '../../src/tools/save-image-fills.js';
+import { setTransferManager, TransferManager, type AssetStore } from '../../src/transfer.js';
 import { toToolDefinition } from '../tool-schema.js';
 
 const saveImageFillsToolDefinition = toToolDefinition(saveImageFillsTool);
@@ -34,7 +35,25 @@ const makeDir = async (): Promise<string> => {
 afterEach(async () => {
   await Promise.all(dirs.map(d => rm(d, { recursive: true, force: true })));
   dirs.length = 0;
+  // The transfer manager is a process-wide singleton the save tool reads via getTransferManager().
+  setTransferManager(null);
 });
+
+/** In-memory AssetStore so we can drive the staging path without a real WebDAV/SFTP server. */
+class FakeStore implements AssetStore {
+  files = new Map<string, Buffer>();
+  async upload(key: string, bytes: Buffer): Promise<void> {
+    this.files.set(key, bytes);
+  }
+  async download(key: string): Promise<Buffer> {
+    const b = this.files.get(key);
+    if (b === undefined) throw new Error('missing');
+    return b;
+  }
+  async remove(key: string): Promise<void> {
+    this.files.delete(key);
+  }
+}
 
 describe('save_image_fills — definition', () => {
   it('requires nodeIds + outDir and is read-only (kind local)', () => {
@@ -107,6 +126,7 @@ describe('writeImageFills', () => {
             {
               index: 0,
               imageHash: 'abcHASH',
+              base64: PNG_B64,
               format: 'PNG',
               path: join(dir, 'abchash.png'),
               relativePath: 'abchash.png',
@@ -117,6 +137,7 @@ describe('writeImageFills', () => {
             {
               index: 2,
               imageHash: 'jpgHASH',
+              base64: JPG_B64,
               format: 'JPG',
               path: join(dir, 'jpghash.jpg'),
               relativePath: 'jpghash.jpg',
@@ -162,6 +183,7 @@ describe('writeImageFills', () => {
     expect(result.nodes[0]?.images[0]).toEqual({
       index: 0,
       imageHash: 'gone',
+      base64: null,
       path: null,
       relativePath: null,
       scaleMode: 'FILL',
@@ -169,6 +191,7 @@ describe('writeImageFills', () => {
     expect(result.nodes[1]?.images[0]).toEqual({
       index: 1,
       imageHash: null,
+      base64: null,
       path: null,
       relativePath: null,
     });
@@ -277,6 +300,7 @@ describe('handleSaveImageFills', () => {
     expect(result.nodes[0]?.images[0]).toEqual({
       index: 0,
       imageHash: 'h',
+      base64: PNG_B64,
       format: 'PNG',
       path: join(dir, 'h.png'),
       relativePath: 'h.png',
@@ -288,5 +312,52 @@ describe('handleSaveImageFills', () => {
     await expect(handleSaveImageFills(emptyDispatch, { nodeIds: ['1:1'] })).rejects.toThrow(
       /outDir/,
     );
+  });
+});
+
+describe('writeImageFills — WebDAV/SFTP staging (assetToken)', () => {
+  it('mints a one-time assetToken per unique file and the staged bytes are retrievable', async () => {
+    const store = new FakeStore();
+    const mgr = new TransferManager(store);
+    setTransferManager(mgr);
+
+    const dir = await makeDir();
+    const nodes: NodeImageFills[] = [
+      {
+        nodeId: '1:1',
+        images: [
+          { index: 0, imageHash: 'abcHASH', base64: PNG_B64, scaleMode: 'FILL' },
+          { index: 2, imageHash: 'jpgHASH', base64: JPG_B64, scaleMode: 'CROP' },
+        ],
+      },
+    ];
+    const result = await writeImageFills(dir, nodes);
+
+    const tokens = result.nodes[0]!.images.map(i => i.assetToken).filter(Boolean);
+    expect(tokens).toHaveLength(2);
+    // base64 still present as a fallback alongside the token.
+    expect(result.nodes[0]!.images[0]!.base64).toBe(PNG_B64);
+
+    const first = await mgr.fetch(tokens[0]!);
+    expect(first).not.toBeNull();
+    expect(first!.bytes.toString('base64')).toBe(PNG_B64);
+    expect(await mgr.fetch(tokens[0]!)).toBeNull(); // one-time
+  });
+
+  it('falls back to inline base64 when staging throws', async () => {
+    const boom = new FakeStore();
+    boom.upload = async () => {
+      throw new Error('staging down');
+    };
+    setTransferManager(new TransferManager(boom));
+
+    const dir = await makeDir();
+    const nodes: NodeImageFills[] = [
+      { nodeId: '1:1', images: [{ index: 0, imageHash: 'abcHASH', base64: PNG_B64, scaleMode: 'FILL' }] },
+    ];
+    const result = await writeImageFills(dir, nodes);
+    expect(result.nodes[0]!.images[0]!.assetToken).toBeUndefined();
+    expect(result.nodes[0]!.images[0]!.base64).toBe(PNG_B64);
+    expect(result.nodes[0]!.images[0]!.path).not.toBeNull();
   });
 });

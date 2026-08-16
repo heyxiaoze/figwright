@@ -2,386 +2,622 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Figwright-Plus 控制台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<!-- anti-flash: set theme before first paint (shadcn-dark-mode insight) -->
+<script>(function(){try{var t=localStorage.getItem('fp-theme');if(t!=='light'&&t!=='dark')t='dark';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
 <style>
-  /* Hallmark · genre: modern-minimal · macrostructure: Control Surface (app console)
-   * tone: technical-utilitarian · anchor hue: indigo #5956E9
-   * redesign: unified 4pt spacing + equal control height + baseline alignment
-   * discipline: every gap/padding/margin references a --sp-* token; every
-   * button/input/select/locale+theme toggle/status pill shares --ctrl-h so the
-   * heights and baselines line up across the whole console.
+  /* Hallmark · genre: modern-minimal · macrostructure: Stat-Led
+   * theme: shadcn neutral (black & white, default) · paper: dark · display: grotesk-sans (Geist)
+   * accent: neutral (chroma 0) — shadcn primary · enrichment: none
+   * discipline: full-width fluid 12-col grid (no 1140 cap); 4pt spacing scale;
+   * one accent; one radius system (10px + pill badges); 8-state controls;
+   * tabular-nums on all data; strictly token-driven OKLCH.
    */
   :root {
-    /* ---- color tokens (preserved from prior design) ---- */
-    --bg: #0d0e12;
-    --surface: #16181d;
-    --surface-2: #1c1f26;
-    --field: #101216;
-    --line: #262a33;
-    --line-strong: #343a45;
-    --line-soft: rgba(38,42,51,.5);
-    --txt: #e8eaed;
-    --muted: #8b929e;
-    --accent: #5956e9;
-    --accent-hover: #6b68f0;
-    --accent-press: #4846c4;
-    --green: #3fb950;
-    --red: #f85149;
-    --amber: #d29922;
-    --hover-surface: #252932;
-    --txt-code: #c8d0db;
-    --txt-log: #9fadbe;
-    --on-accent: #ffffff;
-    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 4px 14px rgba(0,0,0,.22);
+    /* ---- colour tokens (OKLCH, shadcn neutral — black & white, chroma 0) ---- */
+    --color-paper:    oklch(4% 0 0);
+    --color-paper-2:  oklch(14% 0 0);
+    --color-paper-3:  oklch(18% 0 0);
+    --color-hover:    oklch(22% 0 0);
+    --color-rule:     oklch(26% 0 0);
+    --color-rule-2:   oklch(34% 0 0);
+    --color-muted:    oklch(64% 0 0);
+    --color-neutral:  oklch(56% 0 0);
+    --color-ink:      oklch(98% 0 0);
+    --color-ink-2:    oklch(82% 0 0);
+    --color-accent:        oklch(98% 0 0);
+    --color-accent-hover:  oklch(90% 0 0);
+    --color-accent-press:  oklch(82% 0 0);
+    --color-accent-soft:   oklch(98% 0 0 / 0.14);
+    --color-on-accent:     oklch(9% 0 0);
+    --color-focus:    oklch(83% 0 0);
+    --color-ok:       oklch(72% 0.16 150);
+    --color-ok-soft:  oklch(72% 0.16 150 / 0.15);
+    --color-err:      oklch(64% 0.19 28);
+    --color-err-soft: oklch(64% 0.19 28 / 0.14);
+    --muted: var(--color-muted); /* referenced inline by JS audit rows */
 
-    /* ---- type scale ---- */
-    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-    --fs-2xs: 11px;
-    --fs-xs: 11.5px;
-    --fs-sm: 12px;
-    --fs-md: 13px;
-    --fs-lg: 14px;
-    --fs-stat: 20px;
+    /* ---- input field tokens (distinct from panel surface) ---- */
+    --input-bg:          oklch(11% 0 0);
+    --input-border:      oklch(28% 0 0);
+    --input-hover-bg:    oklch(14% 0 0);
+    --input-hover-border: oklch(36% 0 0);
+    --input-inner-glow:  oklch(100% 0 0 / 0.03);
+    --input-focus-glow:  oklch(100% 0 0 / 0.05);
 
-    /* ---- strict 4pt spacing scale ---- */
-    --sp-1: 4px;
-    --sp-2: 8px;
-    --sp-3: 12px;
-    --sp-4: 16px;
-    --sp-5: 20px;
-    --sp-6: 24px;
-    --sp-8: 32px;
+    /* ---- type ---- */
+    --font-body: "Geist", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --fs-caption: 11px;
+    --fs-sm:      12px;
+    --fs-base:    13px;
+    --fs-md:      14px;
+    --fs-lg:      15px;
+    --fs-xl:      18px;
+    --fs-stat:    20px;
+    --fs-statbig: 22px;
+    --fs-hero:    clamp(28px, 2.6vw, 40px);
 
-    /* ---- unified control sizing ---- */
+    /* ---- spacing (4pt scale, named) ---- */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-7: 32px;
+    --space-8: 48px;
+
+    /* ---- control + radius (ONE radius system) ---- */
     --ctrl-h: 34px;
-    --radius-card: 14px;
-    --radius-ctrl: 8px;
-    --radius-sm: 6px;
-    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    --ctrl-h-sm: 28px;
+    --radius: 10px;
+    --radius-pill: 999px;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+    --z-toast: 500;
+    --z-sticky: 200;
   }
-  /* 亮色主题：覆盖变量即可，其余样式全部走 CSS 变量 */
+
+  /* 亮色主题：覆盖变量即可（同一套令牌、同一套半径系统） */
   :root[data-theme="light"] {
-    --bg: #f6f7f9; --surface: #ffffff; --surface-2: #eef0f4; --field: #f1f3f6;
-    --line: #e3e6ec; --line-strong: #cdd2db; --line-soft: rgba(20,24,33,.1);
-    --txt: #1b1e24; --muted: #69707d;
-    --green: #1a7f37; --red: #cf222e; --amber: #9a6700;
-    --hover-surface: #e6e8ee; --txt-code: #3a4150; --txt-log: #4a5568;
-    --shadow: 0 1px 2px rgba(16,18,24,.06), 0 6px 18px rgba(16,18,24,.08);
+    --color-paper:    oklch(100% 0 0);
+    --color-paper-2:  oklch(96% 0 0);
+    --color-paper-3:  oklch(93% 0 0);
+    --color-hover:    oklch(90% 0 0);
+    --color-rule:     oklch(90% 0 0);
+    --color-rule-2:   oklch(80% 0 0);
+    --color-muted:    oklch(45% 0 0);
+    --color-neutral:  oklch(40% 0 0);
+    --color-ink:      oklch(3.3% 0 0);
+    --color-ink-2:    oklch(22% 0 0);
+    --color-accent:        oklch(9% 0 0);
+    --color-accent-hover:  oklch(18% 0 0);
+    --color-accent-press:  oklch(28% 0 0);
+    --color-accent-soft:   oklch(9% 0 0 / 0.12);
+    --color-on-accent:     oklch(98% 0 0);
+    --color-focus:    oklch(20% 0 0);
+    --color-ok:       oklch(45% 0.14 150);
+    --color-ok-soft:  oklch(45% 0.14 150 / 0.12);
+    --color-err:      oklch(55% 0.20 28);
+    --color-err-soft: oklch(55% 0.20 28 / 0.10);
+    --input-bg:          oklch(100% 0 0);
+    --input-border:      oklch(86% 0 0);
+    --input-hover-bg:    oklch(97% 0 0);
+    --input-hover-border: oklch(76% 0 0);
+    --input-inner-glow:  oklch(0% 0 0 / 0.04);
+    --input-focus-glow:  oklch(0% 0 0 / 0.08);
   }
-  * { box-sizing: border-box; }
+
+  *, *::before, *::after { box-sizing: border-box; }
   html, body { overflow-x: clip; }
-
-  /* ---- header toggle buttons (locale + theme) ---- */
-  .theme-btn {
-    width: var(--ctrl-h); height: var(--ctrl-h); padding: 0; flex: none;
-    background: transparent; color: var(--muted); border: 1px solid var(--line);
-    border-radius: var(--radius-ctrl); font-size: 14px; line-height: 1;
-    font-weight: 600; cursor: pointer;
-    transition: border-color .15s var(--ease), color .15s var(--ease), background .15s var(--ease);
-  }
-  .theme-btn:hover { border-color: var(--line-strong); color: var(--txt); }
-
-  /* ---- shared control: every button / input / select shares --ctrl-h ---- */
-  button {
-    height: var(--ctrl-h);
-    display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);
-    padding: 0 var(--sp-4);
-    background: var(--surface-2); color: var(--txt); border: 1px solid var(--line);
-    border-radius: var(--radius-ctrl); cursor: pointer;
-    font-size: var(--fs-md); font-weight: 600; font-family: var(--font-sans); line-height: 1;
-    transition: background .15s var(--ease), border-color .15s var(--ease), transform .08s var(--ease), opacity .15s var(--ease);
-  }
-  button:hover { border-color: var(--line-strong); background: var(--hover-surface); }
-  button:active { transform: translateY(1px); }
-  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
-  button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
-  button.primary:active { background: var(--accent-press); }
-  button.danger { color: var(--red); }
-  button.danger:hover { border-color: rgba(248,81,73,.45); background: rgba(248,81,73,.08); }
-  button.mini { padding: 0 var(--sp-3); font-size: var(--fs-xs); }
-
-  input[type=text], input[type=number], select {
-    width: 100%; height: var(--ctrl-h);
-    background: var(--field); color: var(--txt); border: 1px solid var(--line);
-    border-radius: var(--radius-ctrl); padding: 0 var(--sp-3);
-    font-family: var(--font-mono); font-size: var(--fs-md); line-height: var(--ctrl-h);
-    transition: border-color .15s var(--ease), box-shadow .15s var(--ease);
-  }
-  input[type=text]:focus, input[type=number]:focus, select:focus {
-    outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(89,86,233,.22);
-  }
-
-  label { display: block; color: var(--muted); font-size: var(--fs-sm); font-weight: 500; margin: 0 0 var(--sp-2); }
-
-  /* checkbox rows align to the same control band as inputs/buttons */
-  .ro-check, .ro-toggle {
-    display: inline-flex; align-items: center; gap: var(--sp-2);
-    height: var(--ctrl-h);
-    color: var(--txt); font-size: var(--fs-sm); cursor: pointer;
-  }
-  .ro-check input, .ro-toggle input { width: auto; margin: 0; accent-color: var(--accent); }
-
-  /* ---- layout shell ---- */
   body {
-    margin: 0; background: var(--bg); color: var(--txt);
-    font-family: var(--font-sans);
-    font-size: var(--fs-lg); line-height: 1.55;
+    margin: 0;
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    font-size: var(--fs-base);
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
-  }
-  .wrap { max-width: 1080px; margin: 0 auto; padding: var(--sp-6) var(--sp-5) var(--sp-8); }
-  header {
-    display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4);
-    padding-bottom: var(--sp-4); margin-bottom: var(--sp-5);
-    border-bottom: 1px solid var(--line);
-  }
-  header h1 {
-    font-size: 18px; margin: 0; font-weight: 650; letter-spacing: -.01em;
-    display: flex; align-items: center; gap: var(--sp-3);
-  }
-  header h1::before {
-    content: ""; width: 9px; height: 9px; border-radius: 3px; flex: none;
-    background: var(--accent); box-shadow: 0 0 0 4px rgba(89,86,233,.18);
-  }
-  .head-right { display: flex; align-items: center; gap: var(--sp-2); }
-  .title-wrap { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
-  .ver-badge {
-    flex: none; height: 20px; display: inline-flex; align-items: center;
-    padding: 0 var(--sp-2); border-radius: 999px;
-    background: var(--surface-2); border: 1px solid var(--line);
-    color: var(--muted); font-family: var(--font-mono); font-size: var(--fs-2xs);
-    font-weight: 600; letter-spacing: .02em; white-space: nowrap;
+    text-rendering: optimizeLegibility;
   }
 
-  /* status pill — same height as the toggle buttons */
-  .badge {
-    display: inline-flex; align-items: center; gap: var(--sp-2); height: var(--ctrl-h);
-    padding: 0 var(--sp-4); border-radius: 999px; font-size: var(--fs-sm); font-weight: 600;
-  }
-  .badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; flex: none; }
-  .badge.on { background: rgba(63,185,80,.12); color: var(--green); border: 1px solid rgba(63,185,80,.35); }
-  .badge.on::before { background: var(--green); box-shadow: 0 0 6px rgba(63,185,80,.7); }
-  .badge.off { background: rgba(248,81,73,.1); color: var(--red); border: 1px solid rgba(248,81,73,.32); }
-  .badge.off::before { background: var(--red); }
-
-  /* ---- dashboard grid (panels stretch to equal height per row) ---- */
-  .dash {
+  /* full-width fluid app — no 1140 cap, follows the browser width */
+  .app { width: 100%; min-height: 100dvh; display: flex; flex-direction: column; }
+  .grid {
     display: grid;
-    grid-template-columns: 5fr 7fr;
-    grid-template-areas:
-      "status  peers"
-      "connect connect"
-      "audit   log";
-    gap: var(--sp-4);
-  }
-  .cell-status  { grid-area: status; }
-  .cell-peers   { grid-area: peers; }
-  .cell-connect { grid-area: connect; }
-  .cell-audit   { grid-area: audit; }
-  .cell-log     { grid-area: log; }
-  @media (max-width: 860px) {
-    .dash {
-      grid-template-columns: 1fr;
-      grid-template-areas: "status" "peers" "connect" "audit" "log";
-    }
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: var(--space-4);
+    padding: var(--space-5) clamp(16px, 3vw, 40px) var(--space-8);
+    align-items: start;
   }
 
-  /* ---- card ---- */
-  .card {
-    background: var(--surface); border: 1px solid var(--line);
-    border-radius: var(--radius-card); padding: var(--sp-5); min-width: 0;
+  /* ---- app bar (sticky, full width) ---- */
+  .appbar {
+    position: sticky; top: 0; z-index: var(--z-sticky);
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-4);
+    padding: var(--space-3) clamp(16px, 3vw, 40px);
+    background: color-mix(in oklch, var(--color-paper) 86%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--color-rule);
   }
-  .card h2 {
-    font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .08em;
-    color: var(--muted); margin: 0 0 var(--sp-4); font-weight: 700;
+  .brand { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+  .brand-mark {
+    width: 18px; height: 18px; border-radius: 6px; flex: none;
+    background: var(--color-accent);
   }
-
-  /* key/value rows — equal min-height keeps baselines aligned */
-  .row {
-    display: flex; justify-content: space-between; align-items: center; gap: var(--sp-4);
-    min-height: var(--ctrl-h); padding: var(--sp-2) 0; border-bottom: 1px solid var(--line-soft);
+  .brand h1 {
+    font-size: var(--fs-xl); font-weight: 600; letter-spacing: -0.02em; margin: 0;
+    color: var(--color-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .row:last-of-type { border-bottom: none; }
-  .row .k { color: var(--muted); font-size: var(--fs-md); }
-  .row .v { font-family: var(--font-mono); font-size: var(--fs-md); color: var(--txt); }
-  .v.green { color: var(--green); } .v.amber { color: var(--amber); } .v.red { color: var(--red); }
-
-  /* button row under a card */
-  .btns { display: flex; gap: var(--sp-2); flex-wrap: wrap; margin-top: var(--sp-4); }
-
-  /* inline form row (label/input + action) — bottoms align on the control band */
-  .inline { display: flex; gap: var(--sp-3); align-items: flex-end; flex-wrap: wrap; }
-  .inline > .field { flex: 1 1 180px; min-width: 0; }
-  .field label { margin: 0 0 var(--sp-2); }
-
-  .hint { color: var(--muted); font-size: var(--fs-sm); margin: 0 0 var(--sp-3); line-height: 1.5; }
-  .empty { color: var(--muted); font-size: var(--fs-md); padding: var(--sp-2) 0; }
-  .rule { border: none; border-top: 1px solid var(--line); margin: var(--sp-5) 0; }
-
-  /* command block */
-  .cmd {
-    background: var(--field); border: 1px solid var(--line); border-radius: var(--radius-ctrl);
-    padding: var(--sp-3) 56px var(--sp-3) var(--sp-4);
-    font-family: var(--font-mono); font-size: var(--fs-sm); line-height: 1.55;
-    color: var(--txt-code); margin: var(--sp-3) 0; position: relative; overflow-x: auto; white-space: nowrap;
+  .ver-badge {
+    flex: none; height: 22px; display: inline-flex; align-items: center;
+    padding: 0 9px; border-radius: var(--radius-pill);
+    background: var(--color-paper-3); border: 1px solid var(--color-rule);
+    color: var(--color-muted); font-family: var(--font-mono); font-size: var(--fs-caption); font-weight: 600;
   }
-  .cmd .copy {
-    position: absolute; top: var(--sp-2); right: var(--sp-2); font-size: var(--fs-xs);
-    padding: var(--sp-1) var(--sp-3);
-    background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm);
-    color: var(--accent); cursor: pointer; transition: background .15s var(--ease), border-color .15s var(--ease);
-  }
-  .cmd .copy:hover { background: var(--hover-surface); border-color: var(--line-strong); }
+  .appbar-actions { display: flex; align-items: center; gap: var(--space-2); flex: none; }
 
-  /* peers — rows align center, equal rhythm */
+  .badge {
+    display: inline-flex; align-items: center; gap: 7px; height: var(--ctrl-h);
+    padding: 0 13px; border-radius: var(--radius-pill); font-size: var(--fs-sm); font-weight: 600;
+    border: 1px solid var(--color-rule-2); color: var(--color-muted);
+    transition: color 140ms var(--ease-out), background-color 140ms var(--ease-out), border-color 140ms var(--ease-out);
+  }
+  .badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--color-rule-2); transition: background-color 140ms var(--ease-out); }
+  .badge.on { color: var(--color-ok); background: var(--color-ok-soft); border-color: var(--color-ok-soft); }
+  .badge.on::before { background: var(--color-ok); }
+  .badge.off { color: var(--color-err); background: var(--color-err-soft); border-color: var(--color-err-soft); }
+  .badge.off::before { background: var(--color-err); }
+
+  .icon-btn {
+    width: var(--ctrl-h); height: var(--ctrl-h); flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: transparent; color: var(--color-muted);
+    border: 1px solid var(--color-rule-2); border-radius: var(--radius);
+    font-size: 14px; line-height: 1; cursor: pointer;
+    transition: background-color 140ms var(--ease-out), color 140ms var(--ease-out), border-color 140ms var(--ease-out);
+  }
+  @media (hover: hover) {
+    .icon-btn:hover { color: var(--color-ink); background: var(--color-paper-3); }
+  }
+  .icon-btn:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+
+  /* ---- fluid 12-col grid placement ---- */
+  .control  { grid-column: 1 / -1; }
+  .hero     { grid-column: 1 / -1; }
+  .connect  { grid-column: span 8; }
+  .transfer { grid-column: span 4; }
+  .peers    { grid-column: span 5; }
+  .audit    { grid-column: span 7; }
+  .log      { grid-column: 1 / -1; }
+
+  /* ---- panel ---- */
+  .panel {
+    background: var(--color-paper-2);
+    border: 1px solid var(--color-rule);
+    border-radius: var(--radius);
+    padding: var(--space-5);
+    min-width: 0;
+  }
+  .panel-head { display: flex; align-items: center; gap: 9px; margin-bottom: var(--space-4); }
+  .panel-head h2 {
+    margin: 0; font-size: var(--fs-md); font-weight: 600; letter-spacing: -0.01em;
+    color: var(--color-ink);
+  }
+  .tick { width: 8px; height: 8px; border-radius: 3px; background: var(--color-accent); flex: none; }
+
+  .hint { color: var(--color-muted); font-size: var(--fs-sm); line-height: 1.55; margin: var(--space-3) 0 0; }
+  .hint:first-of-type { margin-top: 0; }
+  .empty { color: var(--color-muted); font-size: var(--fs-base); padding: var(--space-2) 0; }
+  .rule { border: none; border-top: 1px solid var(--color-rule); margin: var(--space-5) 0; }
+
+  /* ---- control bar (运行状态) ---- */
+  .control-body { display: flex; align-items: center; justify-content: space-between; gap: var(--space-5); flex-wrap: wrap; }
+  .run-state { display: flex; align-items: baseline; gap: var(--space-3); min-width: 0; }
+  .run-state .label {
+    font-size: var(--fs-caption); text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--color-muted); font-weight: 600;
+  }
+  #rState {
+    font-family: var(--font-mono); font-size: var(--fs-xl); font-weight: 700; letter-spacing: -0.01em;
+    color: var(--color-ink); font-variant-numeric: tabular-nums; line-height: 1;
+  }
+  #rState.green { color: var(--color-ok); }
+  #rState.red { color: var(--color-err); }
+  .control-meta { display: flex; gap: var(--space-5); flex-wrap: wrap; }
+  .meta-item { display: flex; flex-direction: column; gap: 2px; }
+  .meta-item .k {
+    font-size: var(--fs-caption); text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--color-muted); font-weight: 600;
+  }
+  .meta-item .v {
+    font-family: var(--font-mono); font-size: var(--fs-md); color: var(--color-ink-2);
+    font-variant-numeric: tabular-nums;
+  }
+  .control-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+  /* ---- forms ---- */
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .field.grow { flex: 1 1 200px; }
+  .field.mode-field { max-width: 340px; }
+  label { font-size: var(--fs-caption); text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-muted); font-weight: 600; }
+  .field-row { display: flex; gap: var(--space-3); align-items: flex-end; flex-wrap: wrap; }
+  .field-row.end { justify-content: flex-end; margin-top: var(--space-4); }
+  .field-row + .field-row { margin-top: var(--space-3); }
+
+  /* ---- transfer connectivity test result ---- */
+  .test-result {
+    margin-right: auto; font-size: var(--fs-sm); color: var(--color-muted);
+    font-family: var(--font-body); min-height: 1.2em;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+  }
+  .test-result.ok { color: var(--color-ok); }
+  .test-result.err { color: var(--color-err); }
+
+  input[type=text], input[type=number], input[type=password], select, textarea {
+    width: 100%; height: var(--ctrl-h); padding: 0 11px;
+    font-family: var(--font-mono); font-size: var(--fs-base); color: var(--color-ink);
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius);
+    outline: 2px solid transparent; outline-offset: 1px;
+    transition: background-color 140ms var(--ease-out), border-color 140ms var(--ease-out), outline-color 120ms var(--ease-out), box-shadow 140ms var(--ease-out);
+    box-shadow: inset 0 1px 0 var(--input-inner-glow);
+  }
+  @media (hover: hover) {
+    input[type=text]:hover, input[type=number]:hover, input[type=password]:hover, select:hover, textarea:hover { background: var(--input-hover-bg); border-color: var(--input-hover-border); }
+  }
+  input:focus, select:focus, textarea:focus, input[type=password]:focus {
+    outline-color: var(--color-focus); border-color: var(--color-accent);
+    box-shadow: inset 0 1px 0 var(--input-focus-glow), 0 0 0 1px var(--color-accent-soft);
+  }
+  input::placeholder, textarea::placeholder { color: var(--color-muted); }
+  input:disabled, select:disabled { opacity: 0.5; cursor: not-allowed; }
+  select { appearance: none; -webkit-appearance: none; background-image:
+      linear-gradient(45deg, transparent 50%, var(--color-muted) 50%),
+      linear-gradient(135deg, var(--color-muted) 50%, transparent 50%);
+    background-position: calc(100% - 16px) 14px, calc(100% - 11px) 14px;
+    background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 32px; }
+
+  /* ---- buttons (8 states) ---- */
+  .btn {
+    appearance: none; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    height: var(--ctrl-h); padding: 0 15px; white-space: nowrap;
+    font-family: var(--font-body); font-size: var(--fs-base); font-weight: 600; line-height: 1;
+    color: var(--color-ink); background: var(--color-paper-3);
+    border: 1px solid var(--color-rule-2); border-radius: var(--radius); cursor: pointer;
+    transition: background-color 140ms var(--ease-out), border-color 140ms var(--ease-out),
+                transform 100ms var(--ease-out), color 140ms var(--ease-out);
+  }
+  @media (hover: hover) { .btn:hover { background: var(--color-hover); border-color: var(--color-rule-2); } }
+  .btn:active { transform: translateY(1px); background: var(--color-paper-3); }
+  .btn:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+  .btn:disabled, .btn[disabled] { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .btn[data-state="loading"] { color: transparent; position: relative; pointer-events: none; }
+  .btn[data-state="loading"]::after {
+    content: ""; position: absolute; width: 13px; height: 13px; border-radius: 50%;
+    border: 2px solid var(--color-muted); border-top-color: transparent; animation: spin 0.7s linear infinite;
+  }
+  .btn[data-state="error"] { border-color: var(--color-err); color: var(--color-err); }
+  .btn[data-state="success"] { border-color: var(--color-ok); color: var(--color-ok); }
+  .btn.primary { background: var(--color-accent); color: var(--color-on-accent); border-color: var(--color-accent); }
+  @media (hover: hover) { .btn.primary:hover { background: var(--color-accent-hover); border-color: var(--color-accent-hover); } }
+  .btn.primary:active { background: var(--color-accent-press); border-color: var(--color-accent-press); }
+  .btn.primary:disabled { background: var(--color-rule-2); border-color: var(--color-rule-2); color: var(--color-muted); }
+  .btn.danger { color: var(--color-err); }
+  @media (hover: hover) { .btn.danger:hover { background: var(--color-err-soft); border-color: var(--color-err-soft); } }
+  .btn.mini { height: var(--ctrl-h-sm); padding: 0 11px; font-size: var(--fs-sm); }
+
+  /* standalone small button (token action buttons render class="mini ..." without .btn) */
+  .mini {
+    appearance: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: var(--ctrl-h-sm); padding: 0 11px; white-space: nowrap;
+    font-family: var(--font-body); font-size: var(--fs-sm); font-weight: 600; line-height: 1;
+    color: var(--color-ink); background: var(--color-paper-3);
+    border: 1px solid var(--color-rule-2); border-radius: var(--radius); cursor: pointer;
+    transition: background-color 140ms var(--ease-out), border-color 140ms var(--ease-out), color 140ms var(--ease-out), transform 100ms var(--ease-out);
+  }
+  @media (hover: hover) { .mini:hover { background: var(--color-hover); } }
+  .mini:active { transform: translateY(1px); }
+  .mini:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+  .mini.danger { color: var(--color-err); }
+  @media (hover: hover) { .mini.danger:hover { background: var(--color-err-soft); border-color: var(--color-err-soft); } }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---- remote token head ---- */
+  .remote-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
+  .remote-head .hint { margin: 0; flex: 1; }
+  .remote-actions { display: flex; gap: var(--space-2); flex: none; }
+
+  /* ---- peers (JS-rendered) ---- */
+  .peer-list { display: flex; flex-direction: column; max-height: 264px; overflow: auto; }
   .peer {
-    display: flex; justify-content: space-between; align-items: center; gap: var(--sp-3);
-    padding: var(--sp-2) 0; border-bottom: 1px solid var(--line-soft);
-    font-family: var(--font-mono); font-size: var(--fs-md);
+    display: flex; align-items: center; gap: var(--space-3); padding: 11px 0;
+    border-bottom: 1px solid var(--color-rule);
   }
-  .peer:last-of-type { border-bottom: none; }
-  .peer .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-  .peer .dot.on { background: var(--green); box-shadow: 0 0 6px rgba(63,185,80,.7); }
-  .peer .dot.off { background: var(--line-strong); }
+  .peer:last-child { border-bottom: none; }
+  .peer .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--color-rule-2); }
+  .peer .dot.on { background: var(--color-ok); box-shadow: 0 0 0 3px var(--color-ok-soft); }
   .peer .meta { flex: 1; min-width: 0; }
-  .peer .lab { font-weight: 600; font-size: var(--fs-md); }
-  .peer .sub { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); }
-  .peer .v { color: var(--muted); font-size: var(--fs-sm); }
+  .peer .lab { font-weight: 600; font-size: var(--fs-base); color: var(--color-ink); }
+  .peer .sub {
+    font-family: var(--font-mono); font-size: var(--fs-caption); color: var(--color-muted); margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .peer .v { font-family: var(--font-mono); font-size: var(--fs-sm); color: var(--color-muted); flex: none; }
 
-  /* tokens — single-row per token; all controls share --ctrl-h */
-  .token { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) 0; border-bottom: 1px solid var(--line-soft); }
-  .token:last-of-type { border-bottom: none; }
-  .token .lab { font-weight: 600; font-size: var(--fs-md); white-space: nowrap; flex-shrink: 0; }
-  .token .val { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); white-space: nowrap; flex-shrink: 0; }
-  .token .tok-cmd { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--sp-2); }
-  .token .tok-cmd-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--txt-code); }
-  .tok-select { width: auto; min-width: 130px; height: var(--ctrl-h); flex-shrink: 0; }
+  /* ---- tokens (JS-rendered) ---- */
+  .token-list { display: flex; flex-direction: column; }
+  .token {
+    display: flex; align-items: center; gap: var(--space-3); padding: 11px 0;
+    border-bottom: 1px solid var(--color-rule);
+    overflow-x: auto;
+  }
+  .token:last-child { border-bottom: none; }
+  .token .lab { font-weight: 600; font-size: var(--fs-base); color: var(--color-ink); flex: none; }
+  .token .val { font-family: var(--font-mono); font-size: var(--fs-caption); color: var(--color-muted); flex: none; }
+  .token .tok-cmd { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--space-2); overflow: hidden; }
+  .token .tok-cmd-text {
+    flex: 1; min-width: 0; font-family: var(--font-mono); font-size: var(--fs-caption); color: var(--color-ink-2);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .token .tok-select { width: auto; min-width: 110px; flex-shrink: 0; height: var(--ctrl-h-sm); }
+  /* token action buttons (copy / delete) must never wrap */
+  .token .mini { flex-shrink: 0; white-space: nowrap; }
 
-  /* stats — equal min-height so the four cells stay aligned */
-  .stat { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); margin-bottom: var(--sp-4); }
-  .stat .s { min-height: var(--ctrl-h); display: flex; flex-direction: column; justify-content: center; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-ctrl); padding: var(--sp-3) var(--sp-4); }
-  .stat .s b { display: block; font-size: var(--fs-stat); font-weight: 700; font-family: var(--font-mono); line-height: 1.1; }
-  .stat .s span { font-size: var(--fs-xs); color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
-
-  /* audit rows — 3-col grid, aligned center */
-  .audit-row { display: grid; grid-template-columns: 56px 1fr auto; gap: var(--sp-3); align-items: center;
-    font-family: var(--font-mono); font-size: var(--fs-sm); padding: var(--sp-2) 0; border-bottom: 1px solid var(--line-soft); }
-  .audit-row:last-of-type { border-bottom: none; }
-  .audit-row .tool { color: var(--txt); }
-  .audit-row .ok { color: var(--green); } .audit-row .ok.no { color: var(--red); }
-  .audit-row .ms { color: var(--muted); }
-
-  /* live log */
-  #log {
-    background: var(--field); border: 1px solid var(--line); border-radius: var(--radius-ctrl);
-    padding: var(--sp-3) var(--sp-4); font-family: var(--font-mono); font-size: var(--fs-sm); line-height: 1.6;
-    height: 260px; overflow-y: auto; white-space: pre-wrap; color: var(--txt-log);
+  /* ---- transfer subfields (tinted group, clearly distinct from inputs) ---- */
+  .subfields {
+    display: flex; flex-direction: column; gap: var(--space-3);
+    background: var(--color-paper-3); border-radius: var(--radius);
+    padding: var(--space-4); margin-top: var(--space-4);
+    border: 1px solid var(--color-rule);
+  }
+  :root[data-theme="light"] .subfields {
+    background: var(--color-paper-3);
+    border-color: var(--color-rule-2);
   }
 
-  /* toast */
+  /* ---- overview stats (Stat-Led hero) ---- */
+  .stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
+  .stat {
+    display: flex; flex-direction: column; gap: 6px;
+    background: var(--color-paper-3); border: 1px solid var(--color-rule);
+    border-radius: var(--radius); padding: var(--space-4) var(--space-5);
+  }
+  .stat b {
+    font-family: var(--font-mono); font-size: var(--fs-hero); font-weight: 600; color: var(--color-ink);
+    font-variant-numeric: tabular-nums; line-height: 1;
+  }
+  .stat span { font-size: var(--fs-caption); text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-muted); font-weight: 600; }
+  @media (max-width: 640px) { .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+  .audit-list { display: flex; flex-direction: column; max-height: 280px; overflow: auto; }
+  .audit-row {
+    display: grid; grid-template-columns: 64px 1fr auto; gap: var(--space-3); align-items: center;
+    padding: 9px 0; border-bottom: 1px solid var(--color-rule);
+    font-family: var(--font-mono); font-size: var(--fs-sm);
+  }
+  .audit-row:last-child { border-bottom: none; }
+  .audit-row .ms { color: var(--color-muted); }
+  .audit-row .tool { color: var(--color-ink-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .audit-row .ok { color: var(--color-ok); font-variant-numeric: tabular-nums; }
+  .audit-row .ok.no { color: var(--color-err); }
+
+  /* ---- log ---- */
+  .log-box {
+    background: var(--color-paper-3); border: 1px solid var(--color-rule); border-radius: var(--radius);
+    padding: 13px 15px; font-family: var(--font-mono); font-size: var(--fs-sm); line-height: 1.6;
+    height: 280px; overflow: auto; white-space: pre-wrap; word-break: break-word; color: var(--color-ink-2);
+  }
+
+  /* ---- toast ---- */
   .toast {
-    position: fixed; bottom: var(--sp-6); left: 50%; transform: translateX(-50%);
-    background: var(--surface-2); border: 1px solid var(--accent);
-    color: var(--txt); padding: var(--sp-3) var(--sp-5); border-radius: var(--radius-ctrl);
-    opacity: 0; transition: opacity .25s var(--ease); pointer-events: none; font-size: var(--fs-md); box-shadow: var(--shadow);
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+    background: var(--color-paper-2); border: 1px solid var(--color-accent); color: var(--color-ink);
+    padding: 10px 18px; border-radius: var(--radius); font-size: var(--fs-base);
+    opacity: 0; transition: opacity 200ms var(--ease-out); pointer-events: none;
+    z-index: var(--z-toast); max-width: 90vw;
   }
   .toast.show { opacity: 1; }
 
+  /* ---- responsive: full-width fluid, collapses cleanly ---- */
+  @media (max-width: 1100px) {
+    .connect, .transfer, .peers, .audit { grid-column: 1 / -1; }
+  }
+  @media (max-width: 640px) {
+    .grid { gap: var(--space-3); padding-inline: var(--space-3); }
+    .control-body { flex-direction: column; align-items: stretch; gap: var(--space-4); }
+    .control-actions { width: 100%; }
+    .control-actions .btn { flex: 1; }
+    .appbar { flex-wrap: wrap; }
+  }
+
   @media (prefers-reduced-motion: reduce) {
-    * { transition: none !important; }
+    * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
   }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <div class="title-wrap">
+<div class="app">
+  <header class="appbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
       <h1 data-i18n="app.title">Figwright-Plus 控制台</h1>
       <span id="verBadge" class="ver-badge">v0.05</span>
     </div>
-    <div class="head-right">
-      <button id="btnLang" class="theme-btn" data-i18n="lang.btn" aria-label="切换语言">EN</button>
-      <button id="btnTheme" class="theme-btn" aria-label="切换亮/暗主题">🌙</button>
+    <div class="appbar-actions">
       <span id="statusBadge" class="badge off" data-i18n="dash.stopped">未运行</span>
+      <button id="btnLang" class="icon-btn" data-i18n="lang.btn" aria-label="切换语言">EN</button>
+      <button id="btnTheme" class="icon-btn" aria-label="切换亮/暗主题">🌙</button>
     </div>
   </header>
 
-  <div class="dash">
-    <!-- 运行状态 -->
-    <section class="card cell-status">
-      <h2 data-i18n="status.card">运行状态</h2>
-      <div class="row"><span class="k" data-i18n="k.server">Server</span><span class="v" id="rState">—</span></div>
-      <div class="row"><span class="k" data-i18n="k.pid">PID</span><span class="v" id="rPid">—</span></div>
-      <div class="row"><span class="k" data-i18n="k.uptime">运行时长</span><span class="v" id="rUptime">—</span></div>
-      <div class="row"><span class="k" data-i18n="k.port">端口</span><span class="v" id="rPort">—</span></div>
-      <div class="btns">
-        <button class="primary" id="btnStart" data-i18n="btn.start">启动</button>
-        <button id="btnStop" data-i18n="btn.stop">停止</button>
-        <button id="btnRestart" data-i18n="btn.restart">重启</button>
+  <main class="grid">
+    <!-- 运行状态（整行控制条） -->
+    <section class="panel control">
+      <div class="panel-head"><span class="tick"></span><h2 data-i18n="status.card">运行状态</h2></div>
+      <div class="control-body">
+        <div class="run-state">
+          <span class="label" data-i18n="k.server">Server</span>
+          <b id="rState" class="value">—</b>
+        </div>
+        <div class="control-meta">
+          <div class="meta-item"><span class="k" data-i18n="k.pid">PID</span><b id="rPid" class="v">—</b></div>
+          <div class="meta-item"><span class="k" data-i18n="k.uptime">运行时长</span><b id="rUptime" class="v">—</b></div>
+          <div class="meta-item"><span class="k" data-i18n="k.port">端口</span><b id="rPort" class="v">—</b></div>
+        </div>
+        <div class="control-actions">
+          <button class="btn primary" id="btnStart" data-i18n="btn.start">启动</button>
+          <button class="btn" id="btnStop" data-i18n="btn.stop">停止</button>
+          <button class="btn" id="btnRestart" data-i18n="btn.restart">重启</button>
+        </div>
       </div>
     </section>
 
-    <!-- 已连同伴 -->
-    <section class="card cell-peers">
-      <h2 data-i18n="peers.card">已连同伴</h2>
-      <div id="peerList"><div class="empty">暂无同伴连接</div></div>
+    <!-- 运行概览（Stat-Led hero：四个关键指标） -->
+    <section class="panel hero">
+      <div class="panel-head"><span class="tick"></span><h2 data-i18n="overview.card">运行概览</h2></div>
+      <div class="stat-grid" id="statBox">
+        <div class="stat"><b id="sCalls" class="mono">0</b><span data-i18n="stat.calls">工具调用</span></div>
+        <div class="stat"><b id="sOk" class="mono">—</b><span data-i18n="stat.ok">成功率</span></div>
+        <div class="stat"><b id="sPeers" class="mono">0</b><span data-i18n="stat.peers">已连同伴</span></div>
+        <div class="stat"><b id="sRate" class="mono">0</b><span data-i18n="stat.recent">近 1 分钟</span></div>
+      </div>
+    </section>
+
+    <!-- 连接与伙伴（8） -->
+    <section class="panel connect">
+      <div class="panel-head"><span class="tick"></span><h2 data-i18n="connect.card">连接&同伴</h2></div>
+      <p class="hint" data-i18n="connect.localHint">本机连接</p>
+      <div class="field-row">
+        <div class="field grow">
+          <label data-i18n="port.label">监听端口</label>
+          <input type="number" id="cPort" />
+        </div>
+        <button class="btn primary" id="btnSavePort" data-i18n="btn.savePort">保存并重启</button>
+      </div>
+      <p class="hint" data-i18n="port.hint">修改端口保存后会自动重启 MCP Server，并记得同步更新下方同伴命令里的端口。</p>
+      <hr class="rule" />
+      <div class="remote-head">
+        <span class="hint" data-i18n="connect.remoteHint">远程同伴令牌（每条令牌即一个连接入口，权限由此令牌决定）</span>
+        <div class="remote-actions">
+          <button id="btnRotate" class="btn mini" data-i18n="btn.rotate">轮换主令牌</button>
+          <button id="btnUpdate" class="btn mini" data-i18n="btn.update">更新</button>
+        </div>
+      </div>
+      <div id="tokenList" class="token-list"></div>
+      <div class="field-row" style="margin-top: var(--space-4);">
+        <div class="field grow">
+          <label data-i18n="token.labelHint">新增令牌</label>
+          <input type="text" id="tLabel" data-i18n-ph="token.placeholder" placeholder="例如：Alice 的 VSCode" />
+        </div>
+        <div class="field">
+          <label data-i18n="token.permLabel">权限</label>
+          <select id="tPerm">
+            <option value="readonly" selected data-i18n="token.permReadonly">只读 — 读取 Figma</option>
+            <option value="readwrite" data-i18n="token.permReadWrite">读写 — 修改 Figma</option>
+          </select>
+        </div>
+        <button class="btn primary" id="btnAddToken" data-i18n="btn.addToken">新增令牌</button>
+      </div>
+    </section>
+
+    <!-- 资源传送（4） -->
+    <section class="panel transfer">
+      <div class="panel-head"><span class="tick"></span><h2 data-i18n="transfer.card">资源</h2></div>
+      <p class="hint" data-i18n="transfer.hint">远程同伴经 MCP 连过来时，导出的图片可经 WebDAV / SFTP 暂存、由服务端转发取回（凭据仅存于服务端，不泄露给同伴）。默认内联（直接回传字节）。</p>
+      <div class="field mode-field">
+        <label data-i18n="transfer.mode">传送模式</label>
+        <select id="tMode">
+          <option value="inline" data-i18n="transfer.modeInline">内联字节（默认）</option>
+          <option value="webdav" data-i18n="transfer.modeWebdav">WebDAV</option>
+          <option value="sftp" data-i18n="transfer.modeSftp">SFTP</option>
+        </select>
+      </div>
+
+      <div id="webdavFields" class="subfields" style="display:none;">
+        <div class="field-row">
+          <div class="field grow">
+            <label data-i18n="transfer.url">WebDAV 地址</label>
+            <input type="text" id="wUrl" data-i18n-ph="transfer.urlPh" placeholder="https://dav.example.com/remote.php/webdav" />
+          </div>
+          <div class="field">
+            <label data-i18n="transfer.path">远程子目录（可选）</label>
+            <input type="text" id="wPath" placeholder="figwright-assets" />
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field grow">
+            <label data-i18n="transfer.user">账号</label>
+            <input type="text" id="wUser" />
+          </div>
+          <div class="field grow">
+            <label data-i18n="transfer.pass">密码</label>
+            <input type="password" id="wPass" />
+          </div>
+        </div>
+      </div>
+
+      <div id="sftpFields" class="subfields" style="display:none;">
+        <div class="field-row">
+          <div class="field grow">
+            <label data-i18n="transfer.host">主机</label>
+            <input type="text" id="sHost" placeholder="sftp.example.com" />
+          </div>
+          <div class="field">
+            <label data-i18n="transfer.port">端口</label>
+            <input type="number" id="sPort" placeholder="22" />
+          </div>
+          <div class="field grow">
+            <label data-i18n="transfer.path">远程目录（可选）</label>
+            <input type="text" id="sPath" placeholder="/var/figwright-assets" />
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field grow">
+            <label data-i18n="transfer.user">账号</label>
+            <input type="text" id="sUser" />
+          </div>
+          <div class="field grow">
+            <label data-i18n="transfer.pass">密码</label>
+            <input type="password" id="sPass" />
+          </div>
+        </div>
+      </div>
+
+      <div class="field-row end">
+        <span id="transferTestResult" class="test-result"></span>
+        <button class="btn" id="btnTestTransfer" data-i18n="btn.testTransfer" style="display:none;">测试连接</button>
+        <button class="btn primary" id="btnSaveTransfer" data-i18n="btn.saveTransfer">保存传送配置</button>
+      </div>
+      <p class="hint" data-i18n="transfer.note">保存后重启 Server 生效。内联模式伙伴直接拿到图片字节；WebDAV / SFTP 模式下伙伴拿到一次性令牌，经 fetch_asset 取回，取回后服务端即删除暂存文件。</p>
+    </section>
+
+    <!-- 已连同伴（5） -->
+    <section class="panel peers">
+      <div class="panel-head"><span class="tick"></span><h2 data-i18n="peers.card">已连同伴</h2></div>
+      <div id="peerList" class="peer-list"><div class="empty">暂无同伴连接</div></div>
       <p class="hint" data-i18n="peers.hint">通过 /mcp 接入的远程智能体，即你授权的伙伴。本地 Figma 插件的连接状态请在 Figma 插件面板查看。</p>
     </section>
 
-  <!-- 连接与伙伴 -->
-  <section class="card cell-connect">
-    <h2 data-i18n="connect.card">连接与伙伴</h2>
+    <!-- 活动与审计（7） -->
+    <section class="panel audit">
+      <div class="panel-head"><span class="tick"></span><h2 data-i18n="audit.card">活动与审计</h2></div>
+      <div id="auditList" class="audit-list"><div class="empty">暂无工具调用</div></div>
+    </section>
 
-    <p class="hint" style="margin-top:0;" data-i18n="connect.localHint">本机连接（你的 Figma 插件）</p>
-    <div class="inline">
-      <div class="field">
-        <label data-i18n="port.label">监听端口</label>
-        <input type="number" id="cPort" />
-      </div>
-      <button class="primary" id="btnSavePort" data-i18n="btn.savePort">保存并重启</button>
-    </div>
-    <p class="hint" data-i18n="port.hint">修改端口保存后会自动重启 MCP server，并记得同步更新下方伙伴命令里的端口。</p>
-
-    <hr class="rule" />
-
-    <p class="hint" style="margin-top:0;display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);"><span data-i18n="connect.remoteHint">远程伙伴令牌（每条令牌即一个连接入口，权限由此令牌决定）</span><div style="display:flex;gap:var(--sp-2);"><button id="btnRotate" class="mini" data-i18n="btn.rotate">轮换主令牌</button><button id="btnUpdate" class="mini" data-i18n="btn.update">更新</button></div></p>
-    <div id="tokenList"></div>
-    <div class="inline" style="margin-top: var(--sp-4);">
-      <div class="field" style="flex: 1 1 220px;">
-        <label data-i18n="token.labelHint">新增令牌（可选）</label>
-        <input type="text" id="tLabel" data-i18n-ph="token.placeholder" placeholder="例如：Alice 的 VSCode" />
-      </div>
-      <div class="field" style="flex: 1 1 320px;">
-        <label data-i18n="token.permLabel">权限</label>
-        <select id="tPerm">
-          <option value="readonly" selected data-i18n="token.permReadonly">只读 — 仅读取设计稿</option>
-          <option value="readwrite" data-i18n="token.permReadWrite">读写 — 可修改设计稿</option>
-        </select>
-      </div>
-      <button class="primary" id="btnAddToken" data-i18n="btn.addToken" style="align-self:flex-end;">新增令牌</button>
-    </div>
-  </section>
-
-  <!-- 活动与审计 -->
-  <section class="card cell-audit">
-    <h2 data-i18n="audit.card">活动与审计</h2>
-    <div class="stat" id="statBox">
-      <div class="s"><b id="sCalls">0</b><span data-i18n="stat.calls">工具调用</span></div>
-      <div class="s"><b id="sOk">—</b><span data-i18n="stat.ok">成功率</span></div>
-      <div class="s"><b id="sPeers">0</b><span data-i18n="stat.peers">已连同伴</span></div>
-      <div class="s"><b id="sRate">0</b><span data-i18n="stat.recent">近 1 分钟</span></div>
-    </div>
-    <div id="auditList"><div class="empty">暂无工具调用</div></div>
-  </section>
-
-  <!-- 实时日志 -->
-  <section class="card cell-log">
-    <h2 data-i18n="log.card">实时日志</h2>
-    <div id="log"></div>
-  </section>
-  </div>
+    <!-- 实时日志（整行） -->
+    <section class="panel log">
+      <div class="panel-head"><span class="tick"></span><h2 data-i18n="log.card">实时日志</h2></div>
+      <div id="log" class="log-box"></div>
+    </section>
+  </main>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -396,6 +632,7 @@
 // ---------------------------------------------------------------------------
 const EN = {
   'app.title': 'Figwright-Plus Console',
+  'overview.card': 'Overview',
   'theme.aria': 'Toggle light / dark theme',
   'lang.btn': 'Language',
   'status.card': 'Status',
@@ -409,7 +646,7 @@ const EN = {
   'peers.card': 'Peers',
   'peers.hint': 'Remote agents connect over /mcp — these are the partners you shared access with. For your local Figma plugin status, open the Figma plugin panel.',
   'connect.card': 'Connection & partners',
-  'connect.localHint': 'Local connection (your Figma plugin)',
+  'connect.localHint': 'Local connection',
   'port.label': 'Listen port',
   'btn.savePort': 'Save & restart',
   'port.hint': 'Saving a new port auto-restarts the MCP server. Update the port in the partner commands below afterward.',
@@ -417,15 +654,35 @@ const EN = {
   'token.labelHint': 'New token (optional)',
   'token.placeholder': "e.g. Alice's VSCode",
   'token.permLabel': 'Permission',
-  'token.permReadonly': 'Read-only — partners can only fetch designs (figma → code)',
-  'token.permReadWrite': 'Read/write — partners can also modify designs (code → figma)',
-  'token.readonly': 'Read-only',
+  'token.permReadonly': 'Read-only — reads from Figma',
+  'token.permReadWrite': 'Read/write — modifies Figma',
   'btn.addToken': 'Add token',
   'btn.rotate': 'Rotate primary token',
-  'btn.update': 'Update (restart)',
+  'btn.update': 'Update',
+  'btn.saveTransfer': 'Save transfer config',
+  'btn.testTransfer': 'Test connection',
+
+  // 资源传送
+  'transfer.card': 'Resource transfer',
+  'transfer.hint': 'When a remote partner connects over MCP, exported images can be staged on WebDAV / SFTP and relayed back by the server (credentials stay server-side, never shared with the partner). Inline (default) returns the bytes directly.',
+  'transfer.mode': 'Transfer mode',
+  'transfer.modeInline': 'Inline bytes (default)',
+  'transfer.modeWebdav': 'WebDAV',
+  'transfer.modeSftp': 'SFTP',
+  'transfer.url': 'WebDAV URL',
+  'transfer.urlPh': 'https://dav.example.com/remote.php/webdav',
+  'transfer.path': 'Remote subfolder (optional)',
+  'transfer.host': 'Host',
+  'transfer.port': 'Port',
+  'transfer.user': 'Account',
+  'transfer.pass': 'Password',
+  'transfer.note': 'Saving restarts the server. In inline mode the partner gets the image bytes directly; in WebDAV / SFTP mode the partner gets a one-time token, fetches via fetch_asset, and the server deletes the staged copy after.',
+  'transfer.testing': 'Testing…',
+  'transfer.testOk': 'Connection OK',
+  'transfer.testErr': 'Test failed',
   'audit.card': 'Activity & audit',
   'stat.calls': 'Tool calls',
-  'stat.ok': 'Success',
+  'stat.ok': 'Success rate',
   'stat.peers': 'Peers',
   'stat.recent': 'Last 1 min',
   'log.card': 'Live log',
@@ -441,8 +698,6 @@ const EN = {
   'dash.tokenLabel': 'token: {label}',
   'dash.hits': '{n} calls',
   'dash.tokenN': 'Token {n}',
-  'dash.readonlyBadge': 'read-only',
-  'dash.copy': 'Copy',
   'dash.delete': 'Delete',
   'dash.copyCmd': 'Copy command',
   'dash.secAgo': '{n}s ago',
@@ -474,6 +729,7 @@ const EN = {
 };
 const ZH = {
   'app.title': 'Figwright-Plus 控制台',
+  'overview.card': '运行概览',
   'theme.aria': '切换亮/暗主题',
   'lang.btn': '语言',
   'status.card': '运行状态',
@@ -486,21 +742,41 @@ const ZH = {
   'btn.restart': '重启',
   'peers.card': '已连同伴',
   'peers.hint': '通过 /mcp 接入的远程智能体，即你授权的伙伴。本地 Figma 插件的连接状态请在 Figma 插件面板查看。',
-  'connect.card': '连接与伙伴',
-  'connect.localHint': '本机连接（你的 Figma 插件）',
+  'connect.card': '连接与同伴',
+  'connect.localHint': '本机连接',
   'port.label': '监听端口',
   'btn.savePort': '保存并重启',
-  'port.hint': '修改端口保存后会自动重启 MCP server，并记得同步更新下方伙伴命令里的端口。',
-  'connect.remoteHint': '远程伙伴令牌（每条令牌即一个连接入口，权限由此令牌决定）',
+  'port.hint': '修改端口保存后会自动重启 MCP Server，并记得同步更新下方同伴命令里的端口。',
+  'connect.remoteHint': '远程同伴令牌（每条令牌即一个连接入口，权限由此令牌决定）',
   'token.labelHint': '新增令牌（可选）',
-  'token.placeholder': '例如：Alice 的 VSCode',
+  'token.placeholder': '例如：xiaoze 的 VSCode',
   'token.permLabel': '权限',
-  'token.permReadonly': '只读 — 仅读取设计稿',
-  'token.permReadWrite': '读写 — 可修改设计稿',
-  'token.readonly': '只读',
+  'token.permReadonly': '只读 — 读取 Figma',
+  'token.permReadWrite': '读写 — 修改 Figma',
   'btn.addToken': '新增令牌',
   'btn.rotate': '轮换主令牌',
   'btn.update': '更新',
+  'btn.saveTransfer': '保存传送配置',
+  'btn.testTransfer': '测试连接',
+
+  // 资源传送
+  'transfer.card': '资源传送',
+  'transfer.hint': '远程同伴经 MCP 连过来时，导出的图片可经 WebDAV / SFTP 暂存、由服务端转发取回（凭据仅存于服务端，不泄露给同伴）。默认内联（直接回传字节）。',
+  'transfer.mode': '传送模式',
+  'transfer.modeInline': '内联字节（默认）',
+  'transfer.modeWebdav': 'WebDAV',
+  'transfer.modeSftp': 'SFTP',
+  'transfer.url': 'WebDAV 地址',
+  'transfer.urlPh': 'https://dav.example.com/remote.php/webdav',
+  'transfer.path': '远程子目录（可选）',
+  'transfer.host': '主机',
+  'transfer.port': '端口',
+  'transfer.user': '账号',
+  'transfer.pass': '密码',
+  'transfer.note': '保存后重启 Server 生效。内联模式同伴直接拿到图片字节；WebDAV / SFTP 模式下同伴拿到一次性令牌，经 fetch_asset 取回，取回后服务端即删除暂存文件。',
+  'transfer.testing': '测试中…',
+  'transfer.testOk': '连接成功',
+  'transfer.testErr': '测试失败',
   'audit.card': '活动与审计',
   'stat.calls': '工具调用',
   'stat.ok': '成功率',
@@ -519,8 +795,6 @@ const ZH = {
   'dash.tokenLabel': '令牌：{label}',
   'dash.hits': '{n} 次',
   'dash.tokenN': '令牌 {n}',
-  'dash.readonlyBadge': '只读',
-  'dash.copy': '复制',
   'dash.delete': '删除',
   'dash.copyCmd': '复制命令',
   'dash.secAgo': '{n} 秒前',
@@ -551,6 +825,7 @@ const ZH = {
   'dash.confirmDelete': '确定删除该令牌？使用该令牌的同伴将立即失去连接。',
 };
 const DICTS = { en: EN, zh: ZH };
+
 const LANG_KEY = 'fp-lang';
 const detectLocale = () => {
   try { const s = localStorage.getItem(LANG_KEY); if (s === 'en' || s === 'zh') return s; } catch {}
@@ -616,6 +891,8 @@ function applyStaticI18n() {
 const $ = (id) => document.getElementById(id);
 let lastLogLen = 0;
 let lastStatus = null;
+// 用户在「资源传送」卡片里有未保存的本地修改时置位，避免 2s 轮询把下拉和字段重置掉
+let transferDirty = false;
 
 function toast(msg) {
   const tEl = $('toast'); tEl.textContent = msg; tEl.classList.add('show');
@@ -669,6 +946,26 @@ function render(status) {
   // 端口输入框（仅在未聚焦时回填，避免打断输入）
   if (document.activeElement !== $('cPort')) $('cPort').value = status.config.port;
 
+  // 资源传送配置回填：未保存的本地改动不打断，避免下拉被轮询重置、字段闪退
+  const tr = status.config.transfer || { mode: 'inline' };
+  const serverMode = tr.mode || 'inline';
+  const tmode = transferDirty ? $('tMode').value : serverMode;
+  if (document.activeElement !== $('tMode')) $('tMode').value = tmode;
+  toggleTransferFields(tmode);
+  if (!transferDirty) {
+    if (tr.webdav) {
+      $('wUrl').value = tr.webdav.url || '';
+      $('wPath').value = tr.webdav.path || '';
+      $('wUser').value = tr.webdav.username || '';
+    }
+    if (tr.sftp) {
+      $('sHost').value = tr.sftp.host || '';
+      $('sPort').value = tr.sftp.port || '';
+      $('sPath').value = tr.sftp.path || '';
+      $('sUser').value = tr.sftp.username || '';
+    }
+  }
+
   // 同伴（带身份类型标签与连接状态）
   const pl = $('peerList');
   if (!status.peers.length) {
@@ -717,6 +1014,14 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
 ));
 
+function toggleTransferFields(mode) {
+  $('webdavFields').style.display = mode === 'webdav' ? '' : 'none';
+  $('sftpFields').style.display = mode === 'sftp' ? '' : 'none';
+  // 仅在选了远端模式时显示「测试连接」按钮
+  $('btnTestTransfer').style.display = mode === 'webdav' || mode === 'sftp' ? '' : 'none';
+  if (mode !== 'webdav' && mode !== 'sftp') $('transferTestResult').textContent = '';
+}
+
 function renderTokens(status) {
   const list = status.tokens || [];
   const el = $('tokenList');
@@ -734,8 +1039,8 @@ function renderTokens(status) {
       <span class="val">${masked}</span>
       <div class="tok-cmd"><span class="tok-cmd-text">${esc(cmd)}</span><button class="mini copy" data-cmd="${enc(cmd)}">${t('dash.copyCmd')}</button></div>
       <select class="tok-select" data-act="ro" data-val="${enc(tk.value)}">
-        <option value="readonly" ${ro ? 'selected' : ''} data-i18n="token.permReadonly">只读 — 仅读取设计稿</option>
-        <option value="readwrite" ${!ro ? 'selected' : ''} data-i18n="token.permReadWrite">读写 — 可修改设计稿</option>
+        <option value="readonly" ${ro ? 'selected' : ''} data-i18n="token.permReadonly">Read-only — reads from Figma</option>
+        <option value="readwrite" ${!ro ? 'selected' : ''} data-i18n="token.permReadWrite">Read/write — modifies Figma</option>
       </select>
       <button class="mini danger" data-act="del" data-val="${enc(tk.value)}">${t('dash.delete')}</button>
     </div>`;
@@ -779,7 +1084,76 @@ function renderAudit(status) {
   $('sRate').textContent = recent;
 }
 
+// ---------------------------------------------------------------------------
+// 演示数据模式（?demo=1）：生成大量假同伴 / 审计，便于查看拥挤布局。
+// 直接喂给真实 render()，不改动任何渲染逻辑；去掉 ?demo=1 即恢复真实数据。
+// ---------------------------------------------------------------------------
+const DEMO = new URLSearchParams(location.search).has('demo');
+let demoState = null;
+const DEMO_TOOLS = ['get_document', 'get_selection', 'component_map', 'token_map', 'design_diff', 'get_styles', 'create_rectangle', 'set_fill', 'export_image', 'get_nodes', 'update_text', 'delete_node', 'get_variables', 'set_variable'];
+const DEMO_TOKENS = ['Alice 的 VSCode', 'Bob 的 Cursor', 'Carol 的 Neovim', 'Design-Bot', 'Review-Agent', 'Deploy-Bot'];
+const DEMO_IPS = ['192.168.1.12', '10.0.0.8', '192.168.31.45', '172.16.5.3', '10.0.0.21', '192.168.0.99', '172.20.1.7', '10.8.0.14'];
+const DEMO_NAMES = ['Alice 的 VSCode', 'Bob 的 Cursor', 'Carol 的 Neovim', 'Design-Bot', 'Review-Agent', 'Figma Sync', 'Deploy-Bot', 'QA-Agent', 'Xiao 的 Windsurf', 'Yuki 的 Zed', 'Mira 的 VSCode', 'Tom 的 Cursor'];
+function hhmmss(d) { return [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':'); }
+function buildDemo() {
+  const peers = [];
+  for (let i = 0; i < 12; i++) {
+    const type = i === 0 ? 'local-plugin' : (i % 3 === 0 ? 'remote-plugin' : 'remote-agent');
+    peers.push({
+      type,
+      tokenLabel: i === 0 ? '' : DEMO_NAMES[i % DEMO_NAMES.length],
+      ip: DEMO_IPS[i % DEMO_IPS.length],
+      lastSeen: Math.floor(Date.now() / 1000) - (i * 7 + 3),
+      count: 20 + ((i * 37) % 480),
+      connected: i % 5 !== 0, // 约每 5 个里 1 个离线
+    });
+  }
+  const audit = [];
+  const now = new Date();
+  for (let i = 0; i < 55; i++) {
+    const d = new Date(now.getTime() - i * 1837);
+    audit.push({
+      ts: hhmmss(d),
+      tool: DEMO_TOOLS[(i * 5) % DEMO_TOOLS.length],
+      token: DEMO_TOKENS[i % DEMO_TOKENS.length],
+      ip: DEMO_IPS[i % DEMO_IPS.length],
+      ok: i % 9 !== 0,
+      durMs: 8 + ((i * 13) % 240),
+    });
+  }
+  demoState = {
+    running: true, pid: 48123, uptimeSec: 3725,
+    config: { port: 3055, transfer: { mode: 'inline' } },
+    peers, tokens: [], audit,
+    guide: { lanIp: DEMO_IPS[0] },
+    logs: [
+      '[peer] connect type=remote-agent ip=192.168.1.12 token=Alice 的 VSCode',
+      '[audit] tool_call peer=remote-agent ip=192.168.1.12 tool=get_document ok=true durMs=42',
+      '[peer] disconnect type=remote-agent ip=10.0.0.8 token=Bob 的 Cursor',
+    ],
+  };
+}
+function demoTick() {
+  if (!demoState) { buildDemo(); return; }
+  const d = new Date();
+  demoState.audit.unshift({
+    ts: hhmmss(d),
+    tool: DEMO_TOOLS[Math.floor(Math.random() * DEMO_TOOLS.length)],
+    token: DEMO_TOKENS[Math.floor(Math.random() * DEMO_TOKENS.length)],
+    ip: DEMO_IPS[Math.floor(Math.random() * DEMO_IPS.length)],
+    ok: Math.random() > 0.12,
+    durMs: 8 + Math.floor(Math.random() * 240),
+  });
+  if (demoState.audit.length > 120) demoState.audit.length = 120;
+  demoState.peers.forEach((p) => { if (Math.random() > 0.6) p.count += 1; });
+}
+
 async function poll() {
+  if (DEMO) {
+    demoTick();
+    render(demoState);
+    return;
+  }
   try {
     const r = await fetch('/api/status');
     const status = await r.json();
@@ -793,6 +1167,79 @@ $('btnStart').onclick = () => post('/api/control', { action: 'start' });
 $('btnStop').onclick = () => post('/api/control', { action: 'stop' });
 $('btnRestart').onclick = () => post('/api/control', { action: 'restart' });
 $('btnSavePort').onclick = () => post('/api/config', { action: 'save', port: Number($('cPort').value) });
+
+// 资源传送配置
+$('tMode').onchange = () => {
+  transferDirty = true;
+  toggleTransferFields($('tMode').value);
+  $('transferTestResult').textContent = '';
+};
+// 在传送卡片里输入也算本地改动，防止轮询回填空值覆盖
+['wUrl', 'wPath', 'wUser', 'wPass', 'sHost', 'sPort', 'sPath', 'sUser', 'sPass']
+  .forEach((id) => $(id).addEventListener('input', () => { transferDirty = true; $('transferTestResult').textContent = ''; }));
+$('btnSaveTransfer').onclick = () => {
+  const mode = $('tMode').value;
+  const body = { transfer: { mode } };
+  if (mode === 'webdav') {
+    body.transfer.webdav = {
+      url: $('wUrl').value.trim(),
+      path: $('wPath').value.trim(),
+      username: $('wUser').value.trim(),
+      password: $('wPass').value,
+    };
+  } else if (mode === 'sftp') {
+    body.transfer.sftp = {
+      host: $('sHost').value.trim(),
+      port: $('sPort').value ? Number($('sPort').value) : undefined,
+      path: $('sPath').value.trim(),
+      username: $('sUser').value.trim(),
+      password: $('sPass').value,
+    };
+  }
+  post('/api/config', body).then(() => { transferDirty = false; });
+};
+
+// 测试资源传送配置（用当前填写的字段，未保存也能测）
+$('btnTestTransfer').onclick = async () => {
+  const mode = $('tMode').value;
+  const resultEl = $('transferTestResult');
+  const btn = $('btnTestTransfer');
+  const body = { mode };
+  if (mode === 'webdav') {
+    body.webdav = {
+      url: $('wUrl').value.trim(),
+      path: $('wPath').value.trim(),
+      username: $('wUser').value.trim(),
+      password: $('wPass').value,
+    };
+  } else if (mode === 'sftp') {
+    body.sftp = {
+      host: $('sHost').value.trim(),
+      port: $('sPort').value ? Number($('sPort').value) : undefined,
+      path: $('sPath').value.trim(),
+      username: $('sUser').value.trim(),
+      password: $('sPass').value,
+    };
+  }
+  btn.disabled = true;
+  resultEl.className = 'test-result';
+  resultEl.textContent = t('transfer.testing');
+  try {
+    const r = await post('/api/test-transfer', body);
+    if (r && r.ok) {
+      resultEl.className = 'test-result ok';
+      resultEl.textContent = '✓ ' + (r.error || t('transfer.testOk'));
+    } else {
+      resultEl.className = 'test-result err';
+      resultEl.textContent = '✗ ' + (r && r.error ? r.error : t('transfer.testErr'));
+    }
+  } catch (e) {
+    resultEl.className = 'test-result err';
+    resultEl.textContent = '✗ ' + t('transfer.testErr');
+  } finally {
+    btn.disabled = false;
+  }
+};
 
 // 令牌管理
 $('btnAddToken').onclick = () => post('/api/tokens', {
@@ -853,8 +1300,9 @@ document.addEventListener('click', async (e) => {
 
 // 初始化：先铺静态文案（标题/lang/<html>），再拉第一帧数据
 applyStaticI18n();
+if (DEMO) setTimeout(() => toast('演示数据模式（demo data）— 刷新并去掉 ?demo=1 即恢复真实数据'), 300);
 poll();
-setInterval(poll, 2000);
+setInterval(poll, 2000); // 每 2s 拉一帧，演示模式下驱动数据增长
 </script>
 </body>
 </html>

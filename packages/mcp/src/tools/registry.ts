@@ -42,6 +42,7 @@ import { detachInstanceTool } from './detach-instance.js';
 import { editComponentPropertyTool } from './edit-component-property.js';
 import { exportPdfTool } from './export-pdf.js';
 import { exportVideoTool } from './export-video.js';
+import { fetchAssetTool } from './fetch-asset.js';
 import { findReplaceTextTool } from './find-replace-text.js';
 import { getAnnotationsTool } from './get-annotations.js';
 import { getComponentApiTool } from './get-component-api.js';
@@ -155,6 +156,7 @@ export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
   tokenMapTool,
   iconMapTool,
   designDiffTool,
+  fetchAssetTool,
   // Writes
   setFillsTool,
   setTextTool,

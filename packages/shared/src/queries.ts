@@ -60,12 +60,22 @@ export type GetScreenshotResult = z.infer<typeof GetScreenshotResultSchema>;
 /**
  * Per-node write result; path is null when the node is missing or not exportable. `recovered` and
  * `empty` mirror ScreenshotImage — `recovered:true` means a clipped/off-canvas node was rescued via
- * its intrinsic bounds, `empty:true` means the written file is genuinely blank.
+ * its intrinsic bounds, `empty:true` means the written file is genuinely blank. `base64` carries the
+ * original encoded bytes so a remote partner (whose machine can't see this server's `path`) can
+ * decode and write the file on its own disk — see the tool description.
  */
 export const SavedScreenshotSchema = z.object({
   nodeId: z.string(),
   format: z.string(),
   path: z.string().nullable(),
+  base64: z.string().nullable(),
+  /**
+   * One-time token for a remote partner to retrieve this asset via fetch_asset — set only when the
+   * server is configured with a WebDAV/SFTP transfer target. The partner agent calls fetch_asset
+   * with it; the server pulls the file from its staging store (credentials never leave the server)
+   * and deletes the staged copy. Absent in inline mode and for local saves; `base64` is the fallback.
+   */
+  assetToken: z.string().nullable().optional(),
   empty: z.boolean().optional(),
   recovered: z.boolean().optional(),
 });
@@ -182,14 +192,23 @@ export type ImageFillsResult = z.infer<typeof ImageFillsResultSchema>;
  * so identical images still share one file. `relativePath` is the same file expressed relative to
  * outDir — portable for importing into a project's asset dir instead of hard-coding the absolute
  * path. `format` is sniffed from the bytes (PNG / JPG / GIF / WEBP, or BIN for an unrecognized
- * container) and absent when path is null.
+ * container) and absent when path is null. `base64` carries the original encoded bytes so a remote
+ * partner (whose machine can't see this server's `path`) can decode and write the file on its own
+ * disk — see the tool description.
  */
 export const SavedImageFillSchema = z.object({
   index: z.number(),
   imageHash: z.string().nullable(),
+  base64: z.string().nullable(),
   format: z.string().optional(),
   path: z.string().nullable(),
   relativePath: z.string().nullable(),
+  /**
+   * One-time fetch_asset token for a remote partner to retrieve this asset — present only when the
+   * server has a WebDAV/SFTP transfer target configured. Credentials stay server-side; the partner
+   * agent fetches via the token and the server deletes the staged copy. Absent in inline mode.
+   */
+  assetToken: z.string().nullable().optional(),
   width: z.number().optional(),
   height: z.number().optional(),
   scaleMode: z.string().optional(),

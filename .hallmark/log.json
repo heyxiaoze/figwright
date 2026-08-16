@@ -1,0 +1,25 @@
+[
+  {
+    "date": "2026-08-16",
+    "macrostructure": "Bento Grid",
+    "theme": "custom (indigo-on-dark, tuned)",
+    "theme_axes": "dark / grotesk-sans (Geist) / indigo ~272",
+    "enrichment": "none",
+    "brief": "Figwright-Plus LAN console — 2nd Hallmark redesign: Bento Grid (5fr/7fr) + tuned indigo-on-dark modern-minimal; differs from Workbench/Cobalt on display style + accent hue; same DOM contract (IDs + i18n + <script>) preserved"
+  },
+  {
+    "date": "2026-08-16",
+    "macrostructure": "Workbench (adapted as live ops console)",
+    "theme": "Cobalt",
+    "enrichment": "none",
+    "brief": "Figwright-Plus LAN console — full Hallmark redesign of scripts/dashboard.html (abandon prior design); preserved all DOM IDs + i18n + <script>"
+  },
+  {
+    "date": "2026-08-16",
+    "macrostructure": "Stat-Led",
+    "theme": "shadcn neutral (black & white, default)",
+    "theme_axes": "dark / grotesk-sans (Geist) / neutral chroma 0 (shadcn primary)",
+    "enrichment": "none",
+    "brief": "Figwright-Plus LAN console — 3rd Hallmark pass: Stat-Led (data-as-organizer) + FULL-WIDTH fluid 12-col grid (no 1140 cap); palette swapped from warm-amber to shadcn default neutral (black/white, chroma 0; accent = shadcn primary white in dark / black in light) per user request; green/red kept only as functional run-state/status semantics; shadcn anti-flash inline theme script; same DOM contract (IDs + i18n + <script>) preserved"
+  }
+]
