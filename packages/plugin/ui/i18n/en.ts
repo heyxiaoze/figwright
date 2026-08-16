@@ -85,14 +85,6 @@ export const en = {
 
   // --- Settings tab --------------------------------------------------------------------------
   'set.language': 'Language',
-  'set.quickConnect': 'Quick connect (invite)',
-  'set.quickConnectHint':
-    'Paste the entire “invite” line from the server’s startup log to fill in Host / Port ' +
-    'automatically — no manual entry needed.',
-  'set.invitePlaceholder': 'figwright://connect?host=…&port=3055',
-  'set.fillIn': 'Fill in',
-  'set.inviteError':
-    'Unrecognized invite — it should start with “figwright://connect?” and include host / port.',
   'set.connection': 'Connection',
   'set.connectionHint':
     'The plugin reaches the Figwright server at this address. The relay is loopback-only, so the ' +
@@ -107,7 +99,6 @@ export const en = {
   'set.copied': '{label} copied',
   'set.copyFailed': '{label} copy failed',
   'set.saveReconnect': 'Save & reconnect',
-  'set.resetLoopback': 'Reset to loopback',
   'set.diagnostics': 'Connection diagnostics',
   'set.connected': 'Connected',
   'set.connectedServer': ' (server v{v})',

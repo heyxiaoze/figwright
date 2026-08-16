@@ -82,12 +82,6 @@ export const zh: Messages = {
 
   // --- 设置标签页 ----------------------------------------------------------------------------
   'set.language': '语言',
-  'set.quickConnect': '快速连接（邀请串）',
-  'set.quickConnectHint':
-    '将服务器启动日志中的“invite”一行完整粘贴进来，即可自动填写主机 / 端口，无需手动输入。',
-  'set.invitePlaceholder': 'figwright://connect?host=…&port=3055',
-  'set.fillIn': '填入',
-  'set.inviteError': '无法识别的邀请串：应以 figwright://connect? 开头，且包含 host / port。',
   'set.connection': '连接',
   'set.connectionHint':
     '插件通过该地址连接到 Figwright 服务器。中继仅限本地回环，因此插件必须与服务器运行在同一台机器上 —— ' +
@@ -101,7 +95,6 @@ export const zh: Messages = {
   'set.copied': '{label}已复制',
   'set.copyFailed': '{label}复制失败',
   'set.saveReconnect': '保存并重新连接',
-  'set.resetLoopback': '重置为本地回环',
   'set.diagnostics': '连接诊断',
   'set.connected': '已连接',
   'set.connectedServer': '（服务器 v{v}）',

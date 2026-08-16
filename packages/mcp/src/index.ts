@@ -41,20 +41,25 @@ import { handleTokenMap, TOKEN_MAP_TOOL_NAME } from './tools/token-map.js';
 const SERVER_NAME = 'figwright';
 
 // The plugin and server are one product built from the same tree, so they must report the same
-// version string or the skew check (version.ts) fires a false "plugin is older than server" warning
-// on every call. The plugin bakes `0.1.0-beta-<short-sha>` at build time (see
-// packages/plugin/vite.config.ts); the server resolves the same string here, at startup, so a
-// plugin and server cut from the same commit report identical versions and the warning stays
-// silent. When they genuinely diverge (different commits), the warning correctly fires. The string
-// is valid semver (MAJOR.MINOR.PATCH-prerelease) — the shared comparator rejects non-semver strings,
-// which would otherwise mark every result unverified.
+// version string. The plugin bakes `0.05-<short-sha>` at build time (see
+// packages/plugin/vite.config.ts) and the dashboard badge shows `v0.05-<short-sha>` (see
+// scripts/dashboard.mjs); the server resolves the same string here, at startup, so a plugin and
+// server cut from the same commit report identical versions and the panel's "server v…" line matches
+// the plugin's own footer. Format: `<MAJOR>.<MINOR>-<short-sha>`. MAJOR stays 0 until the major
+// version is bumped (the user will say when); MINOR (`05`) increments by 1 on every release — bump
+// it here in lockstep with vite.config.ts and dashboard.mjs. The string is display-only now
+// (checkPluginCompatibility always returns true), so it no longer has to satisfy the semver
+// comparator in packages/shared/src/version.ts.
+const APP_VERSION_MAJOR = 0;
+const APP_VERSION_MINOR = '05'; // bump +1 on each release — mirrors vite.config.ts / dashboard.mjs
+
 function resolveServerVersion(): string {
   try {
     const sha = execSync('git rev-parse --short HEAD', {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'ignore'],
     }).trim();
-    if (/^[0-9a-f]{4,}$/.test(sha)) return `0.1.0-beta-${sha}`;
+    if (/^[0-9a-f]{4,}$/.test(sha)) return `${APP_VERSION_MAJOR}.${APP_VERSION_MINOR}-${sha}`;
   } catch {
     // Not in a git checkout (e.g. a packaged install) — fall back to the published semver.
   }

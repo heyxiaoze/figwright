@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 
-import { DEFAULT_PORT } from '@figwright/shared';
 import type { ConnectionSettings } from '../../protocol/panel-control.js';
 import { RelayClient } from '../relay/client.js';
 import type { RelayClientState } from '../relay/state.js';
-import { parseInvite } from '../lib/invite.js';
 import { copyToClipboard } from '../lib/clipboard.js';
 import { useI18n } from '../i18n/index.js';
 import UiSection from './UiSection.vue';
@@ -50,31 +48,6 @@ const canSave = computed(() => !portError.value);
 const onSave = (): void => {
   if (portError.value) return;
   props.save({ host: form.host.trim(), port: Number(form.port) });
-};
-
-const resetLoopback = (): void => {
-  form.host = '127.0.0.1';
-  form.port = DEFAULT_PORT;
-};
-
-// --- Quick-connect via invite string ---------------------------------------------------------
-// The server prints one-line `figwright://connect?host=&port=` in LAN mode; pasting it fills the
-// fields in one go so the user never transcribes them by hand.
-const inviteRaw = ref('');
-const inviteError = ref<string | null>(null);
-
-const applyInvite = (): void => {
-  const parsed = parseInvite(inviteRaw.value);
-  if (parsed === null) {
-    inviteError.value = t('set.inviteError');
-    return;
-  }
-  form.host = parsed.host;
-  form.port = parsed.port;
-  inviteError.value = null;
-  inviteRaw.value = '';
-  // Auto-save and reconnect so the user doesn't have to click "Save & reconnect" separately.
-  onSave();
 };
 
 // --- Clipboard feedback ----------------------------------------------------------------------
@@ -189,28 +162,6 @@ onBeforeUnmount(() => {
     </div>
   </UiSection>
 
-  <UiSection :title="t('set.quickConnect')">
-    <p class="text-meta text-dim">{{ t('set.quickConnectHint') }}</p>
-    <div class="mt-2 flex gap-2">
-      <input
-        v-model="inviteRaw"
-        type="text"
-        spellcheck="false"
-        autocomplete="off"
-        class="min-w-0 flex-1 rounded-md border border-line bg-raised px-2 py-1.5 text-panel text-fg outline-none focus:border-brand"
-        :placeholder="t('set.invitePlaceholder')"
-      />
-      <button
-        type="button"
-        class="shrink-0 rounded-md border border-line px-3 py-1.5 text-panel text-dim transition-colors hover:text-fg"
-        @click="applyInvite"
-      >
-        {{ t('set.fillIn') }}
-      </button>
-    </div>
-    <p v-if="inviteError" class="mt-1 text-meta text-danger">{{ inviteError }}</p>
-  </UiSection>
-
   <UiSection :title="t('set.connection')">
     <p class="text-meta text-dim">{{ t('set.connectionHint') }}</p>
 
@@ -269,13 +220,6 @@ onBeforeUnmount(() => {
         @click="onSave"
       >
         {{ t('set.saveReconnect') }}
-      </button>
-      <button
-        type="button"
-        class="rounded-md border border-line px-3 py-1.5 text-panel text-dim transition-colors hover:text-fg"
-        @click="resetLoopback"
-      >
-        {{ t('set.resetLoopback') }}
       </button>
     </div>
   </UiSection>

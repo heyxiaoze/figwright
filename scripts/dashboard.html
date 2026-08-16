@@ -250,18 +250,17 @@
   .peer .sub { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); }
   .peer .v { color: var(--muted); font-size: var(--fs-sm); }
 
-  /* tokens — head row aligns center; mini actions share --ctrl-h */
-  .token { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3) 0; border-bottom: 1px solid var(--line-soft); }
+  /* tokens — single-row per token; all controls share --ctrl-h */
+  .token { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) 0; border-bottom: 1px solid var(--line-soft); }
   .token:last-of-type { border-bottom: none; }
-  .token .head { display: flex; align-items: center; gap: var(--sp-3); }
-  .token .meta { flex: 1; min-width: 0; }
-  .token .lab { font-weight: 600; font-size: var(--fs-md); }
-  .token .val { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); word-break: break-all; }
-  .token .tok-actions { display: flex; gap: var(--sp-2); align-items: center; }
-  .ro-badge { font-size: var(--fs-2xs); font-weight: 700; padding: var(--sp-1) var(--sp-2); border-radius: 999px; background: rgba(210,153,34,.16); color: var(--amber); border: 1px solid rgba(210,153,34,.35); margin-left: var(--sp-2); }
+  .token .lab { font-weight: 600; font-size: var(--fs-md); white-space: nowrap; flex-shrink: 0; }
+  .token .val { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+  .token .tok-cmd { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--sp-2); }
+  .token .tok-cmd-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--txt-code); }
+  .tok-select { width: auto; min-width: 130px; height: var(--ctrl-h); flex-shrink: 0; }
 
   /* stats — equal min-height so the four cells stay aligned */
-  .stat { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: var(--sp-3); margin-bottom: var(--sp-4); }
+  .stat { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); margin-bottom: var(--sp-4); }
   .stat .s { min-height: var(--ctrl-h); display: flex; flex-direction: column; justify-content: center; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-ctrl); padding: var(--sp-3) var(--sp-4); }
   .stat .s b { display: block; font-size: var(--fs-stat); font-weight: 700; font-family: var(--font-mono); line-height: 1.1; }
   .stat .s span { font-size: var(--fs-xs); color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
@@ -343,26 +342,26 @@
       </div>
       <button class="primary" id="btnSavePort" data-i18n="btn.savePort">保存并重启</button>
     </div>
-    <p class="hint" data-i18n="port.hint">修改端口保存后会自动重启 MCP server，并记得同步更新下方伙伴命令与插件邀请串里的端口。</p>
-    <div class="cmd"><span class="copy" data-copy="invite" data-i18n="dash.copy">复制</span><span id="gInvite">—</span></div>
-    <p class="hint" data-i18n="invite.hint">本机 Figma 插件粘贴此邀请串即可连接（走本地中继，免令牌，始终可读可写）。</p>
+    <p class="hint" data-i18n="port.hint">修改端口保存后会自动重启 MCP server，并记得同步更新下方伙伴命令里的端口。</p>
 
     <hr class="rule" />
 
-    <p class="hint" style="margin-top:0;" data-i18n="connect.remoteHint">远程伙伴令牌（每条令牌即一个连接入口，权限由此令牌决定）</p>
+    <p class="hint" style="margin-top:0;display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);"><span data-i18n="connect.remoteHint">远程伙伴令牌（每条令牌即一个连接入口，权限由此令牌决定）</span><div style="display:flex;gap:var(--sp-2);"><button id="btnRotate" class="mini" data-i18n="btn.rotate">轮换主令牌</button><button id="btnUpdate" class="mini" data-i18n="btn.update">更新</button></div></p>
     <div id="tokenList"></div>
     <div class="inline" style="margin-top: var(--sp-4);">
       <div class="field" style="flex: 1 1 220px;">
-        <label data-i18n="token.labelHint">新增令牌标签（可选）</label>
+        <label data-i18n="token.labelHint">新增令牌（可选）</label>
         <input type="text" id="tLabel" data-i18n-ph="token.placeholder" placeholder="例如：Alice 的 VSCode" />
       </div>
-      <label class="ro-check"><input type="checkbox" id="tReadonly" /> <span data-i18n="token.readonly">只读</span></label>
+      <div class="field" style="flex: 1 1 320px;">
+        <label data-i18n="token.permLabel">权限</label>
+        <select id="tPerm">
+          <option value="readonly" selected data-i18n="token.permReadonly">只读 — 仅读取设计稿</option>
+          <option value="readwrite" data-i18n="token.permReadWrite">读写 — 可修改设计稿</option>
+        </select>
+      </div>
+      <button class="primary" id="btnAddToken" data-i18n="btn.addToken" style="align-self:flex-end;">新增令牌</button>
     </div>
-    <div class="btns">
-      <button class="primary" id="btnAddToken" data-i18n="btn.addToken">新增令牌</button>
-      <button id="btnRotate" data-i18n="btn.rotate">轮换主令牌</button>
-    </div>
-    <p class="hint" data-i18n="token.hint">每个令牌即一位伙伴的连接凭证，其「只读」开关决定权限：只读 = 仅 figma-to-code（读）；读写 = 可 code-to-figma（写）。删除或轮换会立即让该伙伴断连。</p>
   </section>
 
   <!-- 活动与审计 -->
@@ -413,15 +412,17 @@ const EN = {
   'connect.localHint': 'Local connection (your Figma plugin)',
   'port.label': 'Listen port',
   'btn.savePort': 'Save & restart',
-  'port.hint': 'Saving a new port auto-restarts the MCP server. Update the port in the partner commands and invite string below afterward.',
-  'invite.hint': 'Paste this invite string into your local Figma plugin to connect (loopback relay, no token, always read/write).',
+  'port.hint': 'Saving a new port auto-restarts the MCP server. Update the port in the partner commands below afterward.',
   'connect.remoteHint': 'Remote partner tokens — each one grants a connection and its permission is set here',
-  'token.labelHint': 'New token label (optional)',
+  'token.labelHint': 'New token (optional)',
   'token.placeholder': "e.g. Alice's VSCode",
+  'token.permLabel': 'Permission',
+  'token.permReadonly': 'Read-only — partners can only fetch designs (figma → code)',
+  'token.permReadWrite': 'Read/write — partners can also modify designs (code → figma)',
   'token.readonly': 'Read-only',
   'btn.addToken': 'Add token',
   'btn.rotate': 'Rotate primary token',
-  'token.hint': 'Each token is one partner’s credential. Its read-only switch decides permission (read-only = figma-to-code only; read/write = code-to-figma). Deleting or rotating disconnects that partner immediately.',
+  'btn.update': 'Update (restart)',
   'audit.card': 'Activity & audit',
   'stat.calls': 'Tool calls',
   'stat.ok': 'Success',
@@ -489,15 +490,17 @@ const ZH = {
   'connect.localHint': '本机连接（你的 Figma 插件）',
   'port.label': '监听端口',
   'btn.savePort': '保存并重启',
-  'port.hint': '修改端口保存后会自动重启 MCP server，并记得同步更新下方伙伴命令与插件邀请串里的端口。',
-  'invite.hint': '本机 Figma 插件粘贴此邀请串即可连接（走本地中继，免令牌，始终可读可写）。',
+  'port.hint': '修改端口保存后会自动重启 MCP server，并记得同步更新下方伙伴命令里的端口。',
   'connect.remoteHint': '远程伙伴令牌（每条令牌即一个连接入口，权限由此令牌决定）',
-  'token.labelHint': '新增令牌标签（可选）',
+  'token.labelHint': '新增令牌（可选）',
   'token.placeholder': '例如：Alice 的 VSCode',
+  'token.permLabel': '权限',
+  'token.permReadonly': '只读 — 仅读取设计稿',
+  'token.permReadWrite': '读写 — 可修改设计稿',
   'token.readonly': '只读',
   'btn.addToken': '新增令牌',
   'btn.rotate': '轮换主令牌',
-  'token.hint': '每个令牌即一位伙伴的连接凭证，其「只读」开关决定权限：只读 = 仅 figma-to-code（读）；读写 = 可 code-to-figma（写）。删除或轮换会立即让该伙伴断连。',
+  'btn.update': '更新',
   'audit.card': '活动与审计',
   'stat.calls': '工具调用',
   'stat.ok': '成功率',
@@ -692,9 +695,8 @@ function render(status) {
     }).join('');
   }
 
-  // 连接指引（仅本机邀请串；远程命令按令牌在 renderTokens 里拼装）
-  const g = status.guide;
-  $('gInvite').textContent = g.invite;
+  // 远程命令按令牌在 renderTokens 里拼装
+
 
   // 日志（仅追加新行，避免滚动跳动）
   if (status.logs.length > lastLogLen) {
@@ -725,19 +727,17 @@ function renderTokens(status) {
     const masked = tk.value.length > 12 ? tk.value.slice(0, 6) + '…' + tk.value.slice(-4) : tk.value;
     const ro = !!tk.readonly;
     const lbl = tk.label ? tk.label : t('dash.tokenN', { n: i + 1 });
-    const roBadge = ro ? '<span class="ro-badge">' + t('dash.readonlyBadge') + '</span>' : '';
     // 这个伙伴专属的远程 MCP 命令（嵌入该令牌）—— 对方直接复制即可用
     const cmd = `npx -y mcp-remote http://${lanIp}:${port}/mcp --allow-http --header "x-figwright-token: ${tk.value}"`;
     return `<div class="token">
-      <div class="head">
-        <div class="meta"><div class="lab">${esc(lbl)}${roBadge}</div><div class="val">${masked}</div></div>
-        <div class="tok-actions">
-          <button class="mini" data-act="copy" data-val="${enc(tk.value)}">${t('dash.copy')}</button>
-          <button class="mini danger" data-act="del" data-val="${enc(tk.value)}">${t('dash.delete')}</button>
-          <label class="ro-toggle"><input type="checkbox" data-act="ro" data-val="${enc(tk.value)}" ${ro ? 'checked' : ''}/> ${t('token.readonly')}</label>
-        </div>
-      </div>
-      <div class="cmd"><span class="copy" data-cmd="${enc(cmd)}">${t('dash.copyCmd')}</span><span>${esc(cmd)}</span></div>
+      <span class="lab">${esc(lbl)}</span>
+      <span class="val">${masked}</span>
+      <div class="tok-cmd"><span class="tok-cmd-text">${esc(cmd)}</span><button class="mini copy" data-cmd="${enc(cmd)}">${t('dash.copyCmd')}</button></div>
+      <select class="tok-select" data-act="ro" data-val="${enc(tk.value)}">
+        <option value="readonly" ${ro ? 'selected' : ''} data-i18n="token.permReadonly">只读 — 仅读取设计稿</option>
+        <option value="readwrite" ${!ro ? 'selected' : ''} data-i18n="token.permReadWrite">读写 — 可修改设计稿</option>
+      </select>
+      <button class="mini danger" data-act="del" data-val="${enc(tk.value)}">${t('dash.delete')}</button>
     </div>`;
   }).join('');
 }
@@ -796,28 +796,26 @@ $('btnSavePort').onclick = () => post('/api/config', { action: 'save', port: Num
 
 // 令牌管理
 $('btnAddToken').onclick = () => post('/api/tokens', {
-  action: 'add', label: $('tLabel').value.trim(), readonly: $('tReadonly').checked,
+  action: 'add', label: $('tLabel').value.trim(), readonly: $('tPerm').value === 'readonly',
 }).then(() => { $('tLabel').value = ''; });
 $('btnRotate').onclick = () => post('/api/tokens', { action: 'rotate' });
+$('btnUpdate').onclick = () => post('/api/control', { action: 'restart' });
 $('tokenList').addEventListener('click', async (e) => {
   const btn = e.target.closest('button[data-act]');
   if (!btn) return;
   const act = btn.getAttribute('data-act');
   const val = decodeURIComponent(btn.getAttribute('data-val'));
-  if (act === 'copy') {
-    try { await navigator.clipboard.writeText(val); toast(t('dash.copiedToken')); }
-    catch { toast(t('dash.copyFailedManual')); }
-  } else if (act === 'del') {
+  if (act === 'del') {
     if (confirm(t('dash.confirmDelete'))) {
       post('/api/tokens', { action: 'remove', value: val });
     }
   }
 });
 $('tokenList').addEventListener('change', async (e) => {
-  const cb = e.target.closest('input[data-act="ro"]');
-  if (!cb) return;
-  const val = decodeURIComponent(cb.getAttribute('data-val'));
-  post('/api/tokens', { action: 'setReadonly', value: val, readonly: cb.checked });
+  const sel = e.target.closest('select[data-act="ro"]');
+  if (!sel) return;
+  const val = decodeURIComponent(sel.getAttribute('data-val'));
+  post('/api/tokens', { action: 'setReadonly', value: val, readonly: sel.value === 'readonly' });
 });
 
 // 主题切换（持久化到 localStorage）
@@ -848,11 +846,6 @@ document.addEventListener('click', async (e) => {
   let txt = '';
   const dcmd = el.getAttribute('data-cmd'); // 令牌专属命令（直接存字符串）
   if (dcmd) txt = decodeURIComponent(dcmd);
-  else {
-    const which = el.getAttribute('data-copy'); // 本机邀请串等按元素 id 取文本
-    const map = { invite: 'gInvite' };
-    txt = $(map[which])?.textContent || '';
-  }
   if (!txt) return;
   try { await navigator.clipboard.writeText(txt); toast(t('dash.copiedClipboard')); }
   catch { toast(t('dash.copyFailedManual')); }

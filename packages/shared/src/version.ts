@@ -175,7 +175,7 @@ export const requiredPluginVersion = (serverVersion: string): string => {
  * False means its results carry {@linkcode pluginSkewNotice}; nothing is refused either way.
  *
  * Figwright-Plus removed the skew warning entirely: the plugin and server ship from the same tree
- * and the plugin bakes `0.1.0-beta-<git-sha>`, so "older than this server" compared two commit
+ * and the plugin bakes `0.05-<git-sha>`, so "older than this server" compared two commit
  * hashes lexicographically — which does not reflect build order and nagged on every plugin update.
  * Per user request the prompt is gone, so compatibility is now always affirmed and no
  * `skewNotice` is ever emitted. `pluginSkewNotice` / `pluginSkewSummary` stay exported (now dead)
