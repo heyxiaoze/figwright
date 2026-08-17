@@ -41,7 +41,8 @@ export const saveImageFillsTool: ToolSpec = {
     'fill image cannot be resolved; images:[] means the ' +
     'node has no image fill; mixed:true means the node fills are per-text-range and were not ' +
     'enumerated. Each image returns `assetToken` when the server has a WebDAV/SFTP transfer target ' +
-    'configured, and `base64` ONLY in inline mode (no transfer target). When THIS MCP CLIENT RUNS ON ' +
+    'configured, and `base64` ONLY in inline mode (no transfer target). path is always relative to ' +
+    'outDir (filename only) — it never exposes the server filesystem. When THIS MCP CLIENT RUNS ON ' +
     'A DIFFERENT MACHINE than the server (a remote partner connected over the LAN/streamable-MCP), ' +
     '`path`/`relativePath` point at the server’s disk and are unreachable from your machine. HOW TO ' +
     'RETRIEVE THE BYTES: (1) when `assetToken` is present, call fetch_asset(token) to pull the bytes ' +
@@ -166,13 +167,15 @@ export const writeImageFills = async (
         return { ...carry(img, transferActive), path: null, relativePath: null };
 
       const existing = hashToPath.get(img.imageHash);
-      if (existing !== undefined)
+      if (existing !== undefined) {
+        const relPath = relative(dir, existing.path);
         return {
           ...carry(img, transferActive),
           format: existing.format,
-          path: existing.path,
-          relativePath: relative(dir, existing.path),
+          path: relPath,
+          relativePath: relPath,
         };
+      }
 
       const buf = Buffer.from(img.base64, 'base64');
       const { format, ext } = detectImageFormat(buf);
@@ -195,7 +198,10 @@ export const writeImageFills = async (
       occupied.add(candidate);
       hashToPath.set(img.imageHash, { path: candidate, format });
       toWrite.set(candidate, buf);
-      return { ...carry(img, transferActive), format, path: candidate, relativePath: relative(dir, candidate) };
+      // Return only the outDir-relative path — never the server's absolute filesystem path.
+      // Remote peers see a clean name; local callers can resolve against their own outDir.
+      const relPath = relative(dir, candidate);
+      return { ...carry(img, transferActive), format, path: relPath, relativePath: relPath };
     });
     return {
       nodeId: node.nodeId,

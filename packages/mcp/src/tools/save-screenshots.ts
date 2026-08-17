@@ -32,7 +32,8 @@ export const saveScreenshotsTool: ToolSpec = {
     'Export nodes and write them to disk under outDir: { saved: [{ nodeId, format, path, assetToken?, base64? (inline only), recovered?, empty? }] }. ' +
     'format is PNG (default) / JPG / SVG; scale applies to raster formats (default 1). ' +
     'path is null for missing or non-exportable nodes. Each entry returns `assetToken` when the server has a ' +
-    'WebDAV/SFTP transfer target configured, and `base64` ONLY in inline mode (no transfer target). When ' +
+    'WebDAV/SFTP transfer target configured, and `base64` ONLY in inline mode (no transfer target). ' +
+    'path is always relative to outDir (filename only) — it never exposes the server filesystem. When ' +
     'THIS MCP CLIENT RUNS ON A DIFFERENT MACHINE than the server (a remote partner connected over the ' +
     'LAN/streamable-MCP), `path` points at the server’s disk and is unreachable from your machine. HOW TO ' +
     'RETRIEVE THE BYTES: (1) when `assetToken` is present, call fetch_asset(token) to pull the bytes over ' +
@@ -93,12 +94,14 @@ export const writeScreenshots = async (
           ...flags,
         };
       const ext = EXTENSIONS[img.format] ?? img.format.toLowerCase();
-      const path = join(dir, `${sanitize(img.nodeId)}.${ext}`);
-      await writeFile(path, Buffer.from(img.base64, 'base64'));
+      const absPath = join(dir, `${sanitize(img.nodeId)}.${ext}`);
+      await writeFile(absPath, Buffer.from(img.base64, 'base64'));
+      // Return only the filename (outDir-relative) — never leak the server's absolute path.
+      const relPath = `${sanitize(img.nodeId)}.${ext}`;
       const result: SavedScreenshot = {
         nodeId: img.nodeId,
         format: img.format,
-        path,
+        path: relPath,
         ...(mgr ? {} : { base64: img.base64 }),
         ...flags,
       };
