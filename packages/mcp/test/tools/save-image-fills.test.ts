@@ -2,8 +2,10 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { ImageFillsResult, NodeImageFills, SaveImageFillsResult } from '@figwright/shared';
+import type { ImageFillsResult, NodeImageFills } from '@figwright/shared';
 import { afterEach, describe, expect, it } from 'vitest';
+
+import type { RemoteSaveImageFillsResult } from '../../src/bridge-schema.js';
 
 import {
   detectImageFormat,
@@ -146,7 +148,7 @@ describe('writeImageFills', () => {
           ],
         },
       ],
-    } satisfies SaveImageFillsResult);
+    } satisfies RemoteSaveImageFillsResult);
     expect((await readFile(join(dir, 'abchash.png'))).toString('base64')).toBe(PNG_B64);
     expect((await readFile(join(dir, 'jpghash.jpg'))).toString('base64')).toBe(JPG_B64);
   });
@@ -298,7 +300,7 @@ describe('handleSaveImageFills', () => {
     const result = (await handleSaveImageFills(dispatch, {
       nodeIds: ['1:1'],
       outDir: dir,
-    })) as SaveImageFillsResult;
+    })) as RemoteSaveImageFillsResult;
 
     expect(dispatched).toEqual({ tool: 'save_image_fills', args: { nodeIds: ['1:1'] } });
     expect(result.nodes[0]?.images[0]).toEqual({

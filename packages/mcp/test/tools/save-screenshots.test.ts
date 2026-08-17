@@ -2,12 +2,10 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type {
-  GetScreenshotResult,
-  SaveScreenshotsResult,
-  ScreenshotImage,
-} from '@figwright/shared';
+import type { GetScreenshotResult, ScreenshotImage } from '@figwright/shared';
 import { afterEach, describe, expect, it } from 'vitest';
+
+import type { RemoteSaveScreenshotsResult } from '../../src/bridge-schema.js';
 
 import {
   handleSaveScreenshots,
@@ -121,7 +119,7 @@ describe('handleSaveScreenshots', () => {
     const result = (await handleSaveScreenshots(dispatch, {
       nodeIds: ['1:1'],
       outDir: dir,
-    })) as SaveScreenshotsResult;
+    })) as RemoteSaveScreenshotsResult;
 
     // scale:1 is always forwarded explicitly — an omitted scale would make get_screenshot auto-fit
     // the raster for model consumption, but files on disk are user artifacts and stay full-res.

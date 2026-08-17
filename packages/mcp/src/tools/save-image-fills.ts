@@ -1,13 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 
-import type {
-  ImageFillsResult,
-  NodeImageFills,
-  SaveImageFillsResult,
-  SavedImageFill,
-  SavedNodeImageFills,
-} from '@figwright/shared';
+import type { ImageFillsResult, NodeImageFills } from '@figwright/shared';
 import { z } from 'zod';
 
 import {
@@ -18,6 +12,11 @@ import {
   getTransferManager,
   isDirectDelivery,
 } from '../transfer.js';
+import type {
+  RemoteSavedImageFill,
+  RemoteSavedNodeImageFills,
+  RemoteSaveImageFillsResult,
+} from '../bridge-schema.js';
 import type { ToolSpec } from './spec.js';
 
 export const SAVE_IMAGE_FILLS_TOOL_NAME = 'save_image_fills';
@@ -127,7 +126,7 @@ const sanitize = (name: string): string => {
 const carry = (
   img: NodeImageFills['images'][number],
   includeBase64: boolean,
-): Omit<SavedImageFill, 'format' | 'path' | 'relativePath'> => ({
+): Omit<RemoteSavedImageFill, 'format' | 'path' | 'relativePath'> => ({
   index: img.index,
   imageHash: img.imageHash,
   // base64 is included only in inline mode. When a transfer target is configured the partner must
@@ -152,7 +151,7 @@ const carry = (
 export const writeImageFills = async (
   outDir: string,
   nodes: readonly NodeImageFills[],
-): Promise<SaveImageFillsResult> => {
+): Promise<RemoteSaveImageFillsResult> => {
   const dir = resolve(normalizeOutDir(outDir));
   await mkdir(dir, { recursive: true });
 
@@ -169,9 +168,9 @@ export const writeImageFills = async (
   const hashToPath = new Map<string, { path: string; format: string }>();
   const occupied = new Set<string>();
 
-  const outNodes: SavedNodeImageFills[] = nodes.map(node => {
+  const outNodes: RemoteSavedNodeImageFills[] = nodes.map(node => {
     const multi = node.images.length > 1;
-    const images: SavedImageFill[] = node.images.map(img => {
+    const images: RemoteSavedImageFill[] = node.images.map(img => {
       if (img.base64 === null || img.imageHash === null)
         return { ...carry(img, !transferActive), path: null, relativePath: null };
 
@@ -263,7 +262,7 @@ export type ToolDispatcher = (toolName: string, args: unknown) => Promise<unknow
 export const handleSaveImageFills = async (
   dispatch: ToolDispatcher,
   rawArgs: unknown,
-): Promise<SaveImageFillsResult> => {
+): Promise<RemoteSaveImageFillsResult> => {
   const args = inputSchema.parse(rawArgs);
   const { nodes } = (await dispatch(SAVE_IMAGE_FILLS_TOOL_NAME, {
     nodeIds: args.nodeIds,

@@ -3,8 +3,6 @@ import { join, resolve } from 'node:path';
 
 import {
   type GetScreenshotResult,
-  type SavedScreenshot,
-  type SaveScreenshotsResult,
   SCREENSHOT_FORMATS,
   type ScreenshotImage,
 } from '@figwright/shared';
@@ -19,6 +17,10 @@ import {
   getTransferManager,
   isDirectDelivery,
 } from '../transfer.js';
+import type {
+  RemoteSavedScreenshot,
+  RemoteSaveScreenshotsResult,
+} from '../bridge-schema.js';
 import type { ToolSpec } from './spec.js';
 
 export const SAVE_SCREENSHOTS_TOOL_NAME = 'save_screenshots';
@@ -78,7 +80,7 @@ const sanitize = (id: string): string => id.replace(/[^\w.-]/g, '-');
 export const writeScreenshots = async (
   outDir: string,
   images: readonly ScreenshotImage[],
-): Promise<SaveScreenshotsResult> => {
+): Promise<RemoteSaveScreenshotsResult> => {
   const dir = resolve(normalizeOutDir(outDir));
   await mkdir(dir, { recursive: true });
 
@@ -88,8 +90,8 @@ export const writeScreenshots = async (
   // Direct-delivery mode: hand back a download URL instead of an assetToken (zero base64 over MCP).
   const directDelivery = isDirectDelivery();
 
-  const saved: SavedScreenshot[] = await Promise.all(
-    images.map(async (img): Promise<SavedScreenshot> => {
+  const saved: RemoteSavedScreenshot[] = await Promise.all(
+    images.map(async (img): Promise<RemoteSavedScreenshot> => {
       const flags = {
         ...(img.empty === true ? { empty: true as const } : {}),
         ...(img.recovered === true ? { recovered: true as const } : {}),
@@ -107,7 +109,7 @@ export const writeScreenshots = async (
       await writeFile(absPath, Buffer.from(img.base64, 'base64'));
       // Return only the filename (outDir-relative) — never leak the server's absolute path.
       const relPath = `${sanitize(img.nodeId)}.${ext}`;
-      const result: SavedScreenshot = {
+      const result: RemoteSavedScreenshot = {
         nodeId: img.nodeId,
         format: img.format,
         path: relPath,
@@ -143,7 +145,7 @@ export type ToolDispatcher = (toolName: string, args: unknown) => Promise<unknow
 export const handleSaveScreenshots = async (
   dispatch: ToolDispatcher,
   rawArgs: unknown,
-): Promise<SaveScreenshotsResult> => {
+): Promise<RemoteSaveScreenshotsResult> => {
   const args = inputSchema.parse(rawArgs);
 
   const screenshotArgs: Record<string, unknown> = { nodeIds: args.nodeIds };
