@@ -1,6 +1,6 @@
 import type { FigmaToken } from '../tokens/figma-tokens.js';
 import { normHex } from '../tokens/hex.js';
-import type { ProjectToken } from '../tokens/tokens.js';
+import { type ProjectToken, refOf } from '../tokens/tokens.js';
 import { casefold } from './casefold.js';
 import { diceSimilarity, type MappingStatus, parseMapLine } from './component-map.js';
 import { statusFor } from './status.js';
@@ -32,8 +32,21 @@ export interface TokenMapping {
     token: string;
     /** Recommended literal: the Tailwind utility base when present, else the CSS var reference. */
     ref: string;
-    cssVar: string;
+    /**
+     * The token's `var()` reference. Absent when the token declares no custom property — a Tailwind
+     * v3 config's theme scales are inlined into the generated utilities, so there is no var() form
+     * and `ref` (the utility base) is the only way to reference it.
+     */
+    cssVar?: string;
     utility?: string;
+    /**
+     * Present only for a SCSS variable: the repo-relative file that declares it. The `ref` does not
+     * resolve on its own — the consuming file must `@use` this file, and how that `@use` is written
+     * decides the reference's final form (`@use '…' as *` keeps `$name`; a plain `@use './tokens'`
+     * makes it `tokens.$name`). Emitting the ref without the import is a compile error, not a style
+     * nit.
+     */
+    from?: string;
     confidence: number;
     /**
      * Which signal produced the match: name similarity and/or exact color value, or 'map-file' for
@@ -47,6 +60,14 @@ export interface TokenMapping {
      * it; binding the wrong same-value sibling silently diverges when that token is later retuned.
      */
     ambiguousWith?: string[];
+    /**
+     * Other files declaring this same name and value, present only when the join could not tell
+     * which one the design meant. `ambiguousWith` cannot express this — it carries token _names_,
+     * and these siblings share the winner's name; only the declaring file differs. Without it a
+     * capped mapping arrived with nothing at all explaining the cap, and `from` looked like a
+     * resolved answer rather than one of several candidates.
+     */
+    ambiguousFrom?: string[];
   };
   /**
    * Set only when status is 'framework-builtin': the Tailwind built-in scale this variable belongs
@@ -208,37 +229,44 @@ const bestNameMatch = (
   return best;
 };
 
-// The literal codegen should emit. A Tailwind utility base (primary-500) is only a real, usable
-// class on a Tailwind project — `token.utility` is derived purely from the name's prefix and so is
-// populated even on non-Tailwind projects (where it's just the name minus a category prefix, and no
-// `primary-500` class exists). So the utility is only surfaced as the ref when the project is
-// Tailwind; otherwise the var() reference is the correct literal. (utility still aids name-matching
-// regardless — that's matchNames, separate from this output.)
-const refOf = (token: ProjectToken, tailwind: boolean): string =>
-  tailwind ? (token.utility ?? token.cssVar) : token.cssVar;
-
 const candidateFrom = (
   token: ProjectToken,
   confidence: number,
   matchedBy: ('name' | 'value' | 'map-file')[],
-  tailwind: boolean,
+  utilityFirst: boolean,
   ambiguousWith?: readonly string[],
+  ambiguousFrom?: readonly string[],
 ): NonNullable<TokenMapping['candidate']> => ({
   token: token.name,
-  ref: refOf(token, tailwind),
-  cssVar: token.cssVar,
-  ...(tailwind && token.utility !== undefined ? { utility: token.utility } : {}),
+  ref: refOf(token, utilityFirst),
+  ...(token.cssVar === undefined ? {} : { cssVar: token.cssVar }),
+  // Gated on utilityIsClass for the same reason refOf is: a namespace-shaped custom property
+  // outside `@theme` has a `utility` stem that no framework turns into a class.
+  ...(utilityFirst && token.utilityIsClass === true && token.utility !== undefined
+    ? { utility: token.utility }
+    : {}),
+  // Always carried when present, and deliberately not gated on anything: without it the ref cannot
+  // be made to resolve at all.
+  ...(token.from === undefined ? {} : { from: token.from }),
   confidence: Number(confidence.toFixed(3)),
   matchedBy,
   ...(ambiguousWith !== undefined && ambiguousWith.length > 0
     ? { ambiguousWith: [...ambiguousWith] }
     : {}),
+  ...(ambiguousFrom !== undefined && ambiguousFrom.length > 0
+    ? { ambiguousFrom: [...ambiguousFrom] }
+    : {}),
 });
 
 export interface TokenJoinOptions {
   threshold: number;
-  /** The project is a Tailwind project — enables the framework built-in scale fallback below. */
-  tailwind?: boolean;
+  /**
+   * The project generates utility classes from a Tailwind-compatible vocabulary — Tailwind itself,
+   * or UnoCSS, whose wind3 and wind4 presets were both confirmed to generate `p-4` / `leading-7` /
+   * `font-bold` / `rounded-lg` / `text-sm` from the same built-in scales. Enables the framework
+   * built-in scale fallback below, and makes a token's utility base the ref to emit.
+   */
+  utilityFirst?: boolean;
   /**
    * Explicit figmaName → project-token ref overrides from docs/figma-token-map.md (raw + normalized
    * keys, like the component map). Highest authority when the ref still resolves to a project
@@ -267,7 +295,9 @@ const resolveOverrideToken = (
 ): ProjectToken | undefined => {
   const wanted = stripVar(ref);
   return projectTokens.find(t =>
-    [t.name, t.cssVar, t.utility].some(id => id !== undefined && stripVar(id) === wanted),
+    [t.name, t.cssVar, t.utility, t.scssVar].some(
+      id => id !== undefined && stripVar(id) === wanted,
+    ),
   );
 };
 
@@ -382,10 +412,32 @@ const joinOne = (
     // than the fuzzy fallback — so it degrades to the normal join, tagged stale for cleanup.
     const token = resolveOverrideToken(override, projectTokens);
     if (token !== undefined) {
+      // A recorded row names a ref, and a ref has no way to name a file. When several file-bound
+      // tokens answer to it, the declaring file returned is this join's choice rather than the
+      // author's — so it carries the same cap the name-only path uses, not the certainty a
+      // recorded mapping otherwise earns.
+      const fileAmbiguous =
+        token.from !== undefined &&
+        projectTokens.some(
+          t => t.name === token.name && t.from !== undefined && t.from !== token.from,
+        );
+      const confidence = fileAmbiguous ? 0.7 : 1;
+      const otherFiles = fileAmbiguous
+        ? projectTokens
+            .filter(t => t.name === token.name && t.from !== undefined && t.from !== token.from)
+            .map(t => t.from as string)
+        : [];
       return {
         ...base,
-        candidate: candidateFrom(token, 1, ['map-file'], opts.tailwind === true),
-        status: 'high',
+        candidate: candidateFrom(
+          token,
+          confidence,
+          ['map-file'],
+          opts.utilityFirst === true,
+          undefined,
+          otherFiles,
+        ),
+        status: fileAmbiguous ? statusFor(confidence, opts.threshold) : 'high',
       };
     }
     return { ...joinTokenScan(figma, projectTokens, opts, base), staleOverride: { ref: override } };
@@ -442,22 +494,39 @@ const joinTokenScan = (
         nameAgrees || (scored.length > 1 && top.score >= 0.5) ? ['name', 'value'] : ['value'];
       return {
         ...base,
-        candidate: candidateFrom(top.token, confidence, matchedBy, opts.tailwind === true),
+        candidate: candidateFrom(top.token, confidence, matchedBy, opts.utilityFirst === true),
         status: statusFor(confidence, opts.threshold),
       };
     }
 
     // Same-value siblings the name can't split: a deterministic pick (best name score, then token
     // name), capped below the high bar so it reads as "verify me", with the alternatives attached.
+    //
+    // A sibling that shares the winner's *name* is not an alternative to choose between by meaning
+    // — it is the same token declared in another file, which only the `from` distinguishes. Listing
+    // it named the candidate as ambiguous with itself, which reads as a data error and tells the
+    // caller nothing. The cap stays, because which file to import is genuinely unresolved.
     const confidence = 0.7;
+    const alternatives = scored
+      .slice(1)
+      .map(s => s.token.name)
+      .filter(name => name !== top.token.name);
+    // Siblings that share the winner's name are the same token in another file — not an
+    // alternative to choose between by meaning, but the reason the caller cannot know which file
+    // to import. Reported as files, so the cap is explained by the thing that caused it.
+    const otherFiles = scored
+      .slice(1)
+      .filter(s => s.token.name === top.token.name && s.token.from !== undefined)
+      .map(s => s.token.from as string);
     return {
       ...base,
       candidate: candidateFrom(
         top.token,
         confidence,
         ['value'],
-        opts.tailwind === true,
-        scored.slice(1).map(s => s.token.name),
+        opts.utilityFirst === true,
+        alternatives,
+        otherFiles,
       ),
       status: statusFor(confidence, opts.threshold),
     };
@@ -469,10 +538,46 @@ const joinTokenScan = (
     // below the high bar so it reads as "name match, verify the value" rather than a confirmed reuse.
     const candHex = normHex(nameMatch.token.value);
     const valueDisagrees = figmaHex !== null && candHex !== null && candHex !== figmaHex;
-    const confidence = valueDisagrees ? Math.min(nameMatch.score, 0.84) : nameMatch.score;
+    // A name matched by name alone cannot say *which* file declared it when several do. That was
+    // harmless while repeats of a name differed only in value — the ref was identical either way —
+    // but a SCSS token's ref only resolves through its declaring file, so picking the first and
+    // reporting confidence 1 claims a certainty the name does not carry. Cap it to the same
+    // "verify me" level the value-ambiguous path uses, rather than invent a winner.
+    const fileAmbiguous =
+      nameMatch.token.from !== undefined &&
+      projectTokens.some(
+        t =>
+          t.name === nameMatch.token.name &&
+          // Only another *file-bound* token makes the choice ambiguous. A pooled custom property
+          // has no `from` at all, and counting its absence as "a different file" capped every
+          // name-only match on the mirror layout, where exactly one file declares the name.
+          t.from !== undefined &&
+          t.from !== nameMatch.token.from,
+      );
+    const confidence = Math.min(
+      valueDisagrees ? Math.min(nameMatch.score, 0.84) : nameMatch.score,
+      fileAmbiguous ? 0.7 : 1,
+    );
+    const otherFiles = fileAmbiguous
+      ? projectTokens
+          .filter(
+            t =>
+              t.name === nameMatch.token.name &&
+              t.from !== undefined &&
+              t.from !== nameMatch.token.from,
+          )
+          .map(t => t.from as string)
+      : [];
     return {
       ...base,
-      candidate: candidateFrom(nameMatch.token, confidence, ['name'], opts.tailwind === true),
+      candidate: candidateFrom(
+        nameMatch.token,
+        confidence,
+        ['name'],
+        opts.utilityFirst === true,
+        undefined,
+        otherFiles,
+      ),
       status: statusFor(confidence, opts.threshold),
     };
   }
@@ -480,7 +585,7 @@ const joinTokenScan = (
   // Fallback (B1): nothing in the project matched, but on a Tailwind project a built-in scale step
   // (spacing/N) is still a usable utility — flag it framework-builtin instead of a false gap. This is
   // reached only here, after every project-token path declined, so it can never shadow a real reuse.
-  if (opts.tailwind === true) {
+  if (opts.utilityFirst === true) {
     const builtin = tailwindBuiltinScale(figma.name);
     if (builtin !== null) return { ...base, builtin, status: 'framework-builtin' };
   }

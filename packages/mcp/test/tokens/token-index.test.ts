@@ -16,7 +16,7 @@ const proj = (name: string, value: string, utility?: string): ProjectToken => ({
   name,
   value,
   cssVar: `var(--${name})`,
-  ...(utility === undefined ? {} : { utility }),
+  ...(utility === undefined ? {} : { utility, utilityIsClass: true }),
 });
 
 describe('buildTokenValueIndex', () => {
@@ -68,6 +68,28 @@ describe('annotateProjectTokens', () => {
         name: 'color-primary-500',
         matchedBy: ['value'],
       },
+    });
+  });
+
+  it('carries the declaring file for a SCSS token, without which the ref cannot resolve', () => {
+    // This annotation is the surface a caller reads when the document has no bound variables to
+    // join — the commoner case — so leaving `from` off it hands codegen a ref it cannot make
+    // compile, which is exactly the failure the forward join already guards against.
+    const index = buildTokenValueIndex([
+      {
+        name: 'color-primary-500',
+        value: '#6266F0',
+        scssVar: '$color-primary-500',
+        from: 'src/styles/_tokens.scss',
+      },
+    ]);
+    const payload = { nodes: [{ id: '1', fills: ['#6266F0'] }] } as never;
+    const r = annotateProjectTokens(payload, index, false);
+    expect(r.projectTokens?.['#6266F0']).toEqual({
+      ref: '$color-primary-500',
+      name: 'color-primary-500',
+      from: 'src/styles/_tokens.scss',
+      matchedBy: ['value'],
     });
   });
 
@@ -152,7 +174,7 @@ describe('loadTokenValueIndex', () => {
     await writeFile(css, ':root { --primary: #6266F0; }');
 
     const first = await loadTokenValueIndex(dir);
-    expect(first.tailwind).toBe(false);
+    expect(first.utilityFirst).toBe(false);
     expect(first.index.get('#6266F0')?.[0]?.name).toBe('primary');
 
     // Cached: same map instance while the file is untouched.

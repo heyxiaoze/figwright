@@ -41,15 +41,19 @@ describe('compareVersions', () => {
 
 describe('requiredPluginVersion', () => {
   it('is the floor once the server has caught up to it', () => {
-    expect(requiredPluginVersion('0.4.0')).toBe(MIN_PLUGIN_VERSION);
+    // Exactly at the floor is the boundary the cap has to get right (`<`, not `<=`). Written
+    // against the constant rather than a literal so raising the floor cannot silently turn this
+    // into a test of the wrong case.
+    expect(requiredPluginVersion(MIN_PLUGIN_VERSION)).toBe(MIN_PLUGIN_VERSION);
     expect(requiredPluginVersion('9.9.9')).toBe(MIN_PLUGIN_VERSION);
   });
 
   it('never exceeds the server itself', () => {
-    // The floor (0.1.0, the base of the renamed Figwright-Plus line) caps the requirement, but a
-    // server reporting an even older version caps it lower still — a server must never demand a
-    // plugin newer than itself, or it would reject the very build sitting beside it.
-    expect(requiredPluginVersion('0.0.9')).toBe('0.0.9');
+    // The window this exists for: the floor is raised in the change that breaks compatibility, which
+    // is always ahead of the release carrying it. Both halves built from that tree report the older
+    // version, and a server that demanded a plugin newer than itself would reject its own build.
+    expect(requiredPluginVersion('0.4.0')).toBe('0.4.0');
+    expect(requiredPluginVersion('0.3.0')).toBe('0.3.0');
     expect(requiredPluginVersion('0.1.0')).toBe('0.1.0');
   });
 });
@@ -94,17 +98,30 @@ describe('pluginSkewNotice', () => {
 });
 
 describe('checkPluginCompatibility', () => {
-  // Skew warnings were removed in Figwright-Plus: the plugin and server ship from the same tree and
-  // "older than this server" compared git SHAs lexicographically, which is not build order. So
-  // compatibility is now always affirmed and every pair reports compatible.
-  it('always reports compatible (skew warnings removed)', () => {
+  it('is satisfied at or above the threshold', () => {
     expect(checkPluginCompatibility('0.4.0', '0.4.0')).toBe(true);
     expect(checkPluginCompatibility('0.4.1', '0.4.0')).toBe(true);
+    // A plugin newer than the server understands every argument an older server sends, so there is
+    // nothing to warn about in that direction.
     expect(checkPluginCompatibility('0.5.0', '0.4.0')).toBe(true);
-    expect(checkPluginCompatibility('0.0.9', '0.1.0')).toBe(true);
-    expect(checkPluginCompatibility('0.1.0-beta.1', '0.1.0')).toBe(true);
-    expect(checkPluginCompatibility('0.1.0', '0.1.0')).toBe(true);
-    expect(checkPluginCompatibility('unknown', '0.4.0')).toBe(true);
-    expect(checkPluginCompatibility('', '0.4.0')).toBe(true);
+  });
+
+  it('is not satisfied below the threshold', () => {
+    expect(checkPluginCompatibility('0.3.0', '0.4.0')).toBe(false);
+    expect(checkPluginCompatibility('0.4.0-beta.1', '0.4.0')).toBe(false);
+  });
+
+  it('is satisfied by a same-generation plugin while the threshold is ahead of the release', () => {
+    // Development on the change that raised the threshold: package.json still says 0.3.0, so both
+    // halves report 0.3.0. Warning here would flag the dev plugin against the server built beside
+    // it — not noise but a false statement.
+    expect(checkPluginCompatibility('0.3.0', '0.3.0')).toBe(true);
+  });
+
+  it('is not satisfied by a version it cannot identify', () => {
+    // Not a build this product ships. A version we cannot read is not evidence that anything is
+    // fine, and the whole point is that skew is never silent.
+    expect(checkPluginCompatibility('unknown', '0.4.0')).toBe(false);
+    expect(checkPluginCompatibility('', '0.4.0')).toBe(false);
   });
 });

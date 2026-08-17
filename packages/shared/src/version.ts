@@ -53,11 +53,7 @@
  * keeps the warning meaningful: a plugin one patch behind a server that changed no arguments is
  * fine, and crying wolf there would teach an agent to discount the warning that matters.
  */
-// Forked as Figwright-Plus at version 0.1.x; the plugin and server are built and shipped together
-// from this tree, so the compatibility floor is the renamed line's base — not the upstream 0.4.0
-// this fork branched from. A higher value would flag every Figwright-Plus plugin as "predates the
-// server" and mark all results unverified.
-export const MIN_PLUGIN_VERSION = '0.1.0';
+export const MIN_PLUGIN_VERSION = '0.5.0';
 
 const parse = (version: string): { core: [number, number, number]; pre: string | null } | null => {
   const match = /^(\d+)\.(\d+)\.(\d+)(?:-([\w.-]+))?(?:\+[\w.-]+)?$/.exec(version);
@@ -129,8 +125,8 @@ export const compareVersions = (a: string, b: string): number | null => {
 export const pluginSkewNotice = (pluginVersion: string, serverVersion: string): string =>
   `${pluginSkewSummary(pluginVersion, serverVersion)} ` +
   'Arguments added after it was built are silently ignored, which is why nothing in the result ' +
-  'itself looks wrong. Update the plugin: download the latest Figwright-Plus release from ' +
-  'https://github.com/heyxiaoze/figwright/releases/latest and re-import it in Figma ' +
+  'itself looks wrong. Update the plugin: download the latest release from ' +
+  'https://github.com/awdr74100/figwright/releases/latest and re-import it in Figma ' +
   '(Plugins → Development → Import plugin from manifest).';
 
 /**
@@ -173,12 +169,11 @@ export const requiredPluginVersion = (serverVersion: string): string => {
 /**
  * Does a plugin reporting `pluginVersion` act on everything a server on `serverVersion` sends?
  * False means its results carry {@linkcode pluginSkewNotice}; nothing is refused either way.
- *
- * Figwright-Plus removed the skew warning entirely: the plugin and server ship from the same tree
- * and the plugin bakes `0.05-<git-sha>`, so "older than this server" compared two commit
- * hashes lexicographically — which does not reflect build order and nagged on every plugin update.
- * Per user request the prompt is gone, so compatibility is now always affirmed and no
- * `skewNotice` is ever emitted. `pluginSkewNotice` / `pluginSkewSummary` stay exported (now dead)
- * so any external importer keeps compiling, but nothing sets them anymore.
  */
-export const checkPluginCompatibility = (_pluginVersion: string, _serverVersion: string): boolean => true;
+export const checkPluginCompatibility = (pluginVersion: string, serverVersion: string): boolean => {
+  const order = compareVersions(pluginVersion, requiredPluginVersion(serverVersion));
+  // An unparseable version is not a build this product ships. Warn rather than assume it is fine:
+  // the whole point is that skew is never silent, and a version we cannot read is not evidence of
+  // anything.
+  return order !== null && order >= 0;
+};

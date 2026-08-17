@@ -8,20 +8,88 @@
 // Delimiting the declarations is `css-scan.ts`; everything here is the token-level meaning built on
 // top of them — the Tailwind namespace derivation, and which block's value leads for a given name.
 
-import { scanCustomProperties } from './css-scan.js';
+import { scanCustomProperties, scanScssVariables } from './css-scan.js';
 
-export interface ProjectToken {
-  /** Custom property name without the leading `--`, e.g. "color-primary-500". */
+/**
+ * How a project token can be referenced in generated code. Which forms exist is a property of the
+ * _source_, not of the individual token:
+ *
+ * - Every CSS source (Tailwind v4 `@theme`, plain `:root` custom properties) declares a custom
+ *   property, so `cssVar` is always there; `utility` is derived from the name's namespace when it
+ *   has one.
+ * - A Tailwind v3 or UnoCSS JS config declares no custom property at all — both inline theme values
+ *   into the utilities they generate — so those tokens are utility-only.
+ * - A SCSS variable is neither. `$color-primary-500` is the reference, but it only _resolves_ once
+ *   the consuming file has pulled the declaring file in, and modern Sass namespaces that: under a
+ *   plain `@use './tokens'` the bare `$color-primary-500` is an undefined-variable error and the
+ *   reference is `tokens.$color-primary-500`. Verified against dart-sass, not assumed. So a SCSS
+ *   token carries the file that declares it and the caller must emit an `@use` for it — the same
+ *   shape as `icon_map`, which returns an svg's path rather than fabricating an import specifier.
+ *
+ * Modelled as a union rather than independent optionals so that {@linkcode refOf} is total by
+ * construction: a token with no reference form is not representable, and the compiler proves it.
+ * Reaching for `token.name` as a last-resort ref would be exactly the failure this guards — a bare
+ * name is not a usable literal in any styling system.
+ */
+// Each arm spells out the fields it does *not* have, so a consumer can read `token.from` and let
+// the compiler narrow, rather than every call site having to re-discriminate first.
+type TokenRef =
+  | { cssVar: string; utility?: string; scssVar?: undefined; from?: undefined }
+  | { cssVar?: undefined; utility: string; scssVar?: undefined; from?: undefined }
+  | {
+      cssVar?: undefined;
+      utility?: undefined;
+      /** The reference including its sigil, e.g. `$color-primary-500`. */
+      scssVar: string;
+      /**
+       * Repo-relative path of the file declaring it. Not decoration: without an `@use` naming this
+       * file, the reference does not compile, and which form the reference takes depends on how
+       * that `@use` is written.
+       */
+      from: string;
+    };
+
+export type ProjectToken = {
+  /** Token name; for a CSS source, the custom property without `--`, e.g. "color-primary-500". */
   name: string;
   /** Raw declared value as written, e.g. "#6266F0", "oklch(0.6 0.2 270)", "0.875rem". */
   value: string;
-  /** CSS reference literal, e.g. "var(--color-primary-500)". */
-  cssVar: string;
-  /** Tailwind v4 utility base (namespace stripped), e.g. "primary-500"; absent for plain CSS vars. */
-  utility?: string;
-  /** Tailwind v4 token category derived from the namespace, e.g. "color"; absent for plain CSS vars. */
+  /** Tailwind token category derived from the namespace, e.g. "color"; absent for plain CSS vars. */
   category?: string;
-}
+  /**
+   * Whether `utility` is a class the framework actually generates, rather than merely a name stem
+   * that happens to start with a namespace prefix.
+   *
+   * The distinction is not cosmetic. `utility` is derived from the name alone, so a stray `:root {
+   * --color-brand: … }` anywhere in the repo yields `brand` — but no framework generates `bg-brand`
+   * from a loose custom property. Only a scale declared in a framework config, or a custom property
+   * declared inside Tailwind v4's `@theme`, actually produces the class. Emitting the utility for
+   * the rest hands codegen a literal that does not exist, and the pooling this loader does (config
+   * tokens _plus_ the repo's CSS) puts both kinds in one list.
+   */
+  utilityIsClass?: boolean;
+} & TokenRef;
+
+/**
+ * The literal codegen should emit for a token.
+ *
+ * A utility base (`primary-500`) leads only when the project has a utility framework **and** the
+ * token came from a source that framework actually generates classes from — see
+ * {@linkcode ProjectToken.utilityIsClass}. Otherwise the `var()` reference is the correct literal.
+ * (`utility` still aids name-matching either way; that is a separate concern from this output.)
+ *
+ * Shared by the forward join and the design-context value annotation so the two can never disagree
+ * about how a token is written.
+ */
+export const refOf = (token: ProjectToken, utilityFirst: boolean): string => {
+  if (utilityFirst && token.utilityIsClass === true && token.utility !== undefined) {
+    return token.utility;
+  }
+  // Narrowing walks the union in the order the arms are declared: a token with no `cssVar` came
+  // from a source that declares none, which is either the utility-only arm or the SCSS one.
+  if (token.cssVar !== undefined) return token.cssVar;
+  return token.utility ?? token.scssVar;
+};
 
 // Tailwind v4 @theme namespaces → category. Ordered most-specific-first so "font-weight-" wins over
 // "font-". The utility base is whatever follows the matched prefix.
@@ -90,11 +158,45 @@ const scopeRank = (scope: string, ancestors: readonly string[]): number => {
  *
  * Order is by {@linkcode scopeRank}, then document order, so the first entry for a name is its base
  * declaration — what `bestNameMatch` and override refs resolve to. Pure — no filesystem.
+ *
+ * `scssSyntax` when the text came from a `.scss` file. The declarations are identical, but the
+ * syntax around them is Sass: without it a `//` comment swallows the following declaration, and one
+ * containing a `}` swallows the whole file.
  */
-export const parseCssCustomProperties = (css: string): ProjectToken[] => {
-  const declarations = scanCustomProperties(css)
+/**
+ * Whether a custom-property declaration applies document-wide, rather than only under some
+ * selector. `var(--x)` from a `:root` block resolves anywhere; the same name declared under
+ * `.theme` resolves to nothing outside it — which decides whether it is a usable project token in
+ * its own right, and whether it may stand in for a Sass variable that is referenceable anywhere.
+ */
+export const isBaseScopedDeclaration = (scope: string, ancestors: readonly string[]): boolean =>
+  scopeRank(scope, ancestors) <= 1;
+
+export const parseCssCustomProperties = (css: string, scssSyntax = false): ProjectToken[] => {
+  const declarations = scanCustomProperties(css, scssSyntax)
+    // A custom property declared inside a `@mixin` or `@function` body only exists wherever that
+    // mixin is included — typically under one specific selector — so `var(--x)` resolves to nothing
+    // in a component that never includes it. The asymmetric twin of the rule-scoped `$var` case:
+    // there the *variable* was unreachable, here the *property* is. Selectors and at-rules that do
+    // emit (`:root`, `.dark`, `@media`) are of course kept.
+    .filter(
+      decl =>
+        !scssSyntax || ![decl.scope, ...decl.ancestors].some(s => /^@(mixin|function)\b/i.test(s)),
+    )
     .map((decl, index) => ({ decl, index, rank: scopeRank(decl.scope, decl.ancestors) }))
     .toSorted((a, b) => a.rank - b.rank || a.index - b.index);
+
+  // Whether a *name* generates a utility class, decided once per name rather than per declaration.
+  // Rank 0 is scopeRank's `@theme` case, and `@theme` is the only CSS in which declaring a custom
+  // property also generates a class: a stray `:root { --color-brand: … }`, which the repo-wide pool
+  // is full of, yields `utility: 'brand'` that nothing turns into `bg-brand`.
+  //
+  // The property belongs to the name, not to one declaration of it. A `@theme` token with a dark
+  // override (`@theme { --color-surface: #fff }` + `.dark { --color-surface: #0a0a0a }`) is kept as
+  // two tokens so the value-match join can recognise either, and ranking each separately left the
+  // dark one utility-less — `bg-surface` for the light value and `var(--color-surface)` for the
+  // dark one, two contradictory refs for one token inside a single payload.
+  const generatesClass = new Set(declarations.filter(d => d.rank === 0).map(d => d.decl.name));
 
   const seen = new Set<string>();
   const out: ProjectToken[] = [];
@@ -103,13 +205,50 @@ export const parseCssCustomProperties = (css: string): ProjectToken[] => {
     if (seen.has(key)) continue;
     seen.add(key);
     const { utility, category } = deriveNamespace(decl.name);
+    const utilityIsClass = generatesClass.has(decl.name);
     out.push({
       name: decl.name,
       value: decl.value,
       cssVar: `var(--${decl.name})`,
       ...(utility === undefined ? {} : { utility }),
       ...(category === undefined ? {} : { category }),
+      ...(utilityIsClass ? { utilityIsClass } : {}),
     });
+  }
+  return out;
+};
+
+/**
+ * Parse the module-level `$name: value` variables out of a SCSS string.
+ *
+ * `from` is the file's repo-relative path and is required rather than optional, because a SCSS
+ * reference does not resolve without an `@use` naming that file — the caller cannot emit the ref
+ * usefully without it. See {@linkcode ProjectToken}'s ref union.
+ *
+ * Variables declared **inside a rule** are dropped: Sass scopes them to that block, so referencing
+ * one from a generated component is a compile error, not a style mismatch. A repeated name keeps
+ * one entry per distinct value, exactly as the CSS parser does, so a light/dark pair declared
+ * through `!default` overrides can still be recognised by value.
+ *
+ * No `utility` or `category` is derived. Those exist to name a _utility class_, and SCSS generates
+ * none — attaching a namespace-shaped stem here would put a `bg-primary-500` back into circulation
+ * on a project that has no such class.
+ */
+export const parseScssVariables = (scss: string, from: string): ProjectToken[] => {
+  const seen = new Set<string>();
+  const out: ProjectToken[] = [];
+  for (const decl of scanScssVariables(scss)) {
+    // Scoped to a rule — local to that block, so not referenceable from generated code.
+    if (decl.scope !== '') continue;
+    // Private to its module. Sass treats a leading `-` or `_` as private: the member is not
+    // exported, `meta.module-variables()` does not list it, and `@use`-ing the file and naming it
+    // is an error. Bootstrap's `$_luminance-list` is one — emitting it hands codegen a ref that
+    // cannot resolve from any other file, which is the one thing this reader must never do.
+    if (decl.name.startsWith('_') || decl.name.startsWith('-')) continue;
+    const key = `${decl.name}\u0000${decl.value}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ name: decl.name, value: decl.value, scssVar: `$${decl.name}`, from });
   }
   return out;
 };
