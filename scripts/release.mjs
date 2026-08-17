@@ -55,6 +55,8 @@ const sha = spawnSync('git', ['rev-parse', '--short', 'HEAD'], {
 }).stdout.trim();
 const tag = `v${plan.version}-${sha}`;
 const zipName = `figwright-plus-${tag}.zip`;
+// zip 打在 packages/plugin/ 下，而 gh 以仓库根为 cwd，必须传绝对路径，否则 zsh 对裸文件名 glob 报 "no matches found"。
+const zipPath = join(repoRoot, 'packages/plugin', zipName);
 const pluginDir = join(repoRoot, 'packages/plugin');
 const manifest = join(pluginDir, 'manifest.json');
 const distDir = join(pluginDir, 'dist');
@@ -92,7 +94,7 @@ run('gh', [
   'release',
   'create',
   tag,
-  zipName,
+  zipPath,
   '--title',
   tag,
   '--notes',
