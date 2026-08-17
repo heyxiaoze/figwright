@@ -554,6 +554,7 @@
           <label data-i18n="transfer.publicBaseUrl">同伴访问本 Server 的基址（含端口）</label>
           <input type="text" id="tPublicBaseUrl" data-i18n-ph="transfer.publicBaseUrlPh" placeholder="http://192.168.1.50:3055" />
         </div>
+        <button type="button" class="mini" id="btnLanIp" data-i18n="transfer.useLanIp">自动填本机 IP</button>
       </div>
 
       <div id="webdavFields" class="subfields" style="display:none;">
@@ -694,6 +695,7 @@ const EN = {
   'transfer.directUrl': 'Direct-delivery mode (zero base64: return a download URL to the partner)',
   'transfer.publicBaseUrl': 'Base URL the partner uses to reach this server (include port)',
   'transfer.publicBaseUrlPh': 'http://192.168.1.50:3055',
+  'transfer.useLanIp': 'Use LAN IP',
   'transfer.note': 'Saving restarts the server. In inline mode the partner gets the image bytes directly; in WebDAV / SFTP mode the partner gets a one-time token, fetches via fetch_asset, and the server deletes the staged copy after.',
   'transfer.testing': 'Testing…',
   'transfer.testOk': 'Connection OK',
@@ -794,6 +796,7 @@ const ZH = {
   'transfer.directUrl': '直链模式（零 base64：返回下载 URL 给同伴）',
   'transfer.publicBaseUrl': '同伴访问本 Server 的基址（含端口）',
   'transfer.publicBaseUrlPh': 'http://192.168.1.50:3055',
+  'transfer.useLanIp': '自动填本机 IP',
   'transfer.note': '保存后重启 Server 生效。内联模式同伴直接拿到图片字节；WebDAV / SFTP 模式下同伴拿到一次性令牌，经 fetch_asset 取回，取回后服务端即删除暂存文件。',
   'transfer.testing': '测试中…',
   'transfer.testOk': '连接成功',
@@ -1209,6 +1212,30 @@ $('tDirectUrl').addEventListener('change', () => {
   $('transferTestResult').textContent = '';
 });
 $('tPublicBaseUrl').addEventListener('input', () => { transferDirty = true; $('transferTestResult').textContent = ''; });
+// 自动填本机 LAN IP：从控制台 /api/lan-ip 取真实可达的局域网地址，避免手填成 127.0.0.1
+$('btnLanIp').addEventListener('click', async () => {
+  let ip = '';
+  try {
+    const r = await fetch('/api/lan-ip');
+    const j = await r.json();
+    ip = j.lanIp || '';
+  } catch {
+    /* 接口不可用，退回用最近状态 */
+  }
+  if (!ip || ip === '127.0.0.1') {
+    const fallback = lastStatus && lastStatus.guide && lastStatus.guide.lanIp;
+    if (fallback && fallback !== '127.0.0.1') ip = fallback;
+  }
+  if (ip && ip !== '127.0.0.1') {
+    const port = (lastStatus && lastStatus.config && lastStatus.config.port) || 3055;
+    $('tPublicBaseUrl').value = `http://${ip}:${port}`;
+    transferDirty = true;
+    $('transferTestResult').textContent = '';
+    toast(t('transfer.useLanIp') + '：' + ip);
+  } else {
+    toast('未检测到可用的 LAN IP');
+  }
+});
 $('btnSaveTransfer').onclick = () => {
   const mode = $('tMode').value;
   const body = { transfer: { mode } };

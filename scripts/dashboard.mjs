@@ -19,6 +19,7 @@
  *   DASH_PORT=3057 node scripts/dashboard.mjs   # 自定义控制台端口
  */
 import { createServer } from 'node:http';
+import net from 'node:net';
 import { spawn, execSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
@@ -251,6 +252,73 @@ async function restartServer() {
   // 再多等一拍，确保 OS 释放监听套接字
   await new Promise((r) => setTimeout(r, 300));
   return startServer();
+}
+
+// ----------------------------------------------------------------------------
+// 看门狗：server 进程崩溃 / 卡死（端口无响应）时自动拉起，避免此前"卡死"需人工重启。
+// 仅在 autoSupervise 为真时看护——用户主动 Stop 后停止看护，Start/Restart 后恢复。
+// 冷却 10s：避免进程崩溃循环里反复拉起。TCP 探测 127.0.0.1:port（server 绑 0.0.0.0 时
+// 回环可达），连不上即进程已死/卡死；连得上且被 serverProc 持有则视为存活。
+// ----------------------------------------------------------------------------
+let autoSupervise = true;
+let lastWatchdogRestart = 0;
+
+function isPortAlive() {
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ host: '127.0.0.1', port: config.port });
+    let settled = false;
+    const done = (ok) => {
+      if (settled) return;
+      settled = true;
+      try {
+        socket.destroy();
+      } catch {
+        /* 已关 */
+      }
+      resolve(ok);
+    };
+    const timer = setTimeout(() => done(false), 2000);
+    socket.setTimeout(2000);
+    socket.once('connect', () => {
+      clearTimeout(timer);
+      done(true);
+    });
+    socket.once('error', () => {
+      clearTimeout(timer);
+      done(false);
+    });
+    socket.once('timeout', () => {
+      clearTimeout(timer);
+      done(false);
+    });
+  });
+}
+
+async function watchdogTick() {
+  if (!autoSupervise) return;
+  const alive = serverProc ? await isPortAlive() : false;
+  if (alive) return;
+  const now = Date.now();
+  if (now - lastWatchdogRestart < 10_000) return; // 冷却
+  lastWatchdogRestart = now;
+  pushLog('看门狗：server 未响应，尝试自动重启 …');
+  if (serverProc) {
+    try {
+      serverProc.kill('SIGKILL');
+    } catch {
+      /* 已退 */
+    }
+    serverProc = null;
+  }
+  const r = startServer();
+  if (!r.ok) pushLog('看门狗：自动重启失败 — ' + (r.msg || ''));
+  else pushLog('看门狗：已自动重启 server');
+}
+
+function startWatchdog() {
+  setInterval(() => {
+    watchdogTick().catch(() => {});
+  }, 15_000);
 }
 
 // ----------------------------------------------------------------------------
@@ -494,15 +562,27 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // 本机 LAN IP（供控制台"自动填本机 IP"按钮，避免手填成 127.0.0.1）
+  if (req.method === 'GET' && url.pathname === '/api/lan-ip') {
+    sendJson(res, { lanIp: getLanIp() });
+    return;
+  }
+
   // 启停控制
   if (req.method === 'POST' && url.pathname === '/api/control') {
     const body = await readBody(req);
     const action = body.action;
     let r;
-    if (action === 'start') r = startServer();
-    else if (action === 'stop') r = await stopServer();
-    else if (action === 'restart') r = await restartServer();
-    else r = { ok: false, msg: '未知 action' };
+    if (action === 'start') {
+      autoSupervise = true;
+      r = startServer();
+    } else if (action === 'stop') {
+      autoSupervise = false; // 用户主动停止后不再看护，避免看门狗立刻拉起
+      r = await stopServer();
+    } else if (action === 'restart') {
+      autoSupervise = true;
+      r = await restartServer();
+    } else r = { ok: false, msg: '未知 action' };
     sendJson(res, r, r.ok ? 200 : 400);
     return;
   }
@@ -665,6 +745,7 @@ server.listen(DASH_PORT, '127.0.0.1', () => {
   console.log(`  配置文件: ${CONFIG_PATH}`);
   console.log(`  自动拉起 figwright MCP server ...\n`);
   startServer();
+  startWatchdog(); // 看护 server：崩溃/卡死自动重启
   if (open && platform() === 'darwin') {
     spawn('open', [`http://127.0.0.1:${DASH_PORT}`]);
   }
