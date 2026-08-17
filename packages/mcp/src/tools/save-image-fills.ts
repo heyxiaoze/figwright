@@ -164,13 +164,13 @@ export const writeImageFills = async (
     const multi = node.images.length > 1;
     const images: SavedImageFill[] = node.images.map(img => {
       if (img.base64 === null || img.imageHash === null)
-        return { ...carry(img, transferActive), path: null, relativePath: null };
+        return { ...carry(img, !transferActive), path: null, relativePath: null };
 
       const existing = hashToPath.get(img.imageHash);
       if (existing !== undefined) {
         const relPath = relative(dir, existing.path);
         return {
-          ...carry(img, transferActive),
+          ...carry(img, !transferActive),
           format: existing.format,
           path: relPath,
           relativePath: relPath,
@@ -201,7 +201,7 @@ export const writeImageFills = async (
       // Return only the outDir-relative path — never the server's absolute filesystem path.
       // Remote peers see a clean name; local callers can resolve against their own outDir.
       const relPath = relative(dir, candidate);
-      return { ...carry(img, transferActive), format, path: relPath, relativePath: relPath };
+      return { ...carry(img, !transferActive), format, path: relPath, relativePath: relPath };
     });
     return {
       nodeId: node.nodeId,
@@ -223,7 +223,9 @@ export const writeImageFills = async (
     const pathToToken = new Map<string, string>();
     await Promise.all(
       [...toWrite].map(async ([p, buf]) => {
-        pathToToken.set(p, await mgr.stage(p.split('/').pop() ?? 'image', buf));
+        // Key by relative path (same as img.path) so the lookup below matches.
+        const relKey = relative(dir, p);
+        pathToToken.set(relKey, await mgr.stage(p.split('/').pop() ?? 'image', buf));
       }),
     );
     for (const node of outNodes) {
