@@ -7,5 +7,7 @@ onlyBuiltDependencies:
   - '@tailwindcss/oxide'
   - oxlint
   - oxfmt
+  - cpu-features
+  - ssh2
 
 minimumReleaseAge: 0

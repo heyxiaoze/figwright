@@ -34,10 +34,11 @@ const DASH_HTML = join(__dirname, 'dashboard.html');
 const DASH_PORT = Number(process.env.DASH_PORT ?? 3056);
 
 // Figwright-Plus version shown as a small badge after the console title. Format mirrors the plugin
-// panel and the git release: `v<MAJOR>.<MINOR>-<short-git-sha>`. MINOR starts at 05 and increments
-// by 1 on each release; the commit hash is read live so the console always matches the build it runs from.
-const APP_MAJOR = 0;
-const APP_MINOR = '06'; // bump +1 on each release
+// panel and the git release: `v<MAJOR>.<MINOR>-<short-git-sha>`. MAJOR was bumped to 1 at the 1.0
+// release; MINOR starts at 0 and increments by 1 on each release; the commit hash is read live so
+// the console always matches the build it runs from.
+const APP_MAJOR = 1;
+const APP_MINOR = '0'; // bump +1 on each release
 function appVersion() {
   let sha = 'dev';
   try {
@@ -445,8 +446,7 @@ const server = createServer(async (req, res) => {
       return;
     }
     let html = readFileSync(DASH_HTML, 'utf8');
-    const versionBase = `v${APP_MAJOR}.${APP_MINOR}`;
-    html = html.replace(versionBase, appVersion()); // stamp the live version into the badge
+    html = html.replace(/(<span id="verBadge"[^>]*>)[^<]*(<\/span>)/, `$1${appVersion()}$2`); // stamp the live version into the badge
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(html);
     return;

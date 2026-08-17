@@ -43,17 +43,17 @@ import { handleTokenMap, TOKEN_MAP_TOOL_NAME } from './tools/token-map.js';
 const SERVER_NAME = 'figwright';
 
 // The plugin and server are one product built from the same tree, so they must report the same
-// version string. The plugin bakes `0.05-<short-sha>` at build time (see
-// packages/plugin/vite.config.ts) and the dashboard badge shows `v0.05-<short-sha>` (see
+// version string. The plugin bakes `1.0-<short-sha>` at build time (see
+// packages/plugin/vite.config.ts) and the dashboard badge shows `v1.0-<short-sha>` (see
 // scripts/dashboard.mjs); the server resolves the same string here, at startup, so a plugin and
 // server cut from the same commit report identical versions and the panel's "server v…" line matches
-// the plugin's own footer. Format: `<MAJOR>.<MINOR>-<short-sha>`. MAJOR stays 0 until the major
-// version is bumped (the user will say when); MINOR (`05`) increments by 1 on every release — bump
+// the plugin's own footer. Format: `<MAJOR>.<MINOR>-<short-sha>`. MAJOR bumped to 1 at the 1.0
+// release (the user will say when to bump again); MINOR (`0`) increments by 1 on every release — bump
 // it here in lockstep with vite.config.ts and dashboard.mjs. The string is display-only now
 // (checkPluginCompatibility always returns true), so it no longer has to satisfy the semver
 // comparator in packages/shared/src/version.ts.
-const APP_VERSION_MAJOR = 0;
-const APP_VERSION_MINOR = '05'; // bump +1 on each release — mirrors vite.config.ts / dashboard.mjs
+const APP_VERSION_MAJOR = 1;
+const APP_VERSION_MINOR = '0'; // bump +1 on each release — mirrors vite.config.ts / dashboard.mjs
 
 function resolveServerVersion(): string {
   try {
