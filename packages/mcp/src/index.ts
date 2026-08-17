@@ -134,6 +134,36 @@ if (LAN_MODE) {
 // is set — in inline mode the save tools fall back to returning base64 directly.
 initTransferManager(process.env.FIGWRIGHT_TRANSFER);
 
+// Surface the transfer posture at startup so the operator can see, at a glance, whether save_*
+// results return inline base64 (local/loopback) or asset tokens (remote partner over WebDAV/SFTP).
+// This closes a confusing repeat-bug where the config file still said mode:'inline' while the
+// operator believed SFTP was active — base64 then kept leaking into save results. A glance at the
+// startup banner now settles it immediately.
+{
+  const raw = process.env.FIGWRIGHT_TRANSFER;
+  if (!raw) {
+    log('[figwright] resource transfer: INLINE — save_* results include base64 (local/loopback mode)');
+  } else {
+    let mode = 'unknown';
+    try {
+      mode = (JSON.parse(raw) as { mode?: string }).mode ?? 'inline';
+    } catch {
+      mode = 'UNPARSEABLE';
+    }
+    if (getTransferManager()) {
+      log(
+        `[figwright] resource transfer: ${mode.toUpperCase()} — save_* results return asset tokens, ` +
+          `base64 OMITTED (remote-partner mode)`,
+      );
+    } else {
+      log(
+        `[figwright] resource transfer: ${mode.toUpperCase()} configured but store unavailable ` +
+          `(incomplete credentials?) — FALLING BACK to inline base64`,
+      );
+    }
+  }
+}
+
 // The display token for connection guides (plugin invite / mcp-remote command) and for the follower's
 // own /rpc auth to the leader. null in loopback mode where no token is expected.
 const primaryToken = tokens?.primary()?.value;
