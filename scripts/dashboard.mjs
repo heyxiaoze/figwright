@@ -390,7 +390,11 @@ async function testSftp(cfg) {
   const username = String(cfg.username ?? '').trim();
   const password = String(cfg.password ?? '');
   const port = Number.isInteger(cfg.port) ? cfg.port : 22;
-  const remoteDir = String(cfg.path ?? '').trim().replace(/^\/+|\/+$/g, '') || '.';
+  // 与 packages/mcp/src/transfer.ts 的 SftpStore.remotePath 保持一致：路径视为绝对路径。
+  // 去掉首尾斜杠后再补前导 /，空路径回退到当前目录(.)。避免裸相对路径被 OpenSSH sftp-server
+  // 解析到 $HOME 之下导致 “No such file”。用户填写 `/home/user/xxx` 或 `home/user/xxx` 均可。
+  const rawDir = String(cfg.path ?? '').trim();
+  const remoteDir = rawDir ? '/' + rawDir.replace(/^\/+|\/+$/g, '') : '.';
   if (!host) return { ok: false, error: '缺少主机地址' };
   if (!username || !password) return { ok: false, error: '缺少用户名或密码' };
 
@@ -405,9 +409,9 @@ async function testSftp(cfg) {
     await client.connect({ host, port, username, password, timeout: 10000 });
     const list = await client.list(remoteDir);
     const probeKey = '.figwright-test-' + randomBytes(6).toString('hex');
-    const remotePath = '/' + [remoteDir === '.' ? '' : remoteDir, probeKey].filter(Boolean).join('/');
-    await client.put(Buffer.from('figwright-connection-test'), remotePath);
-    await client.delete(remotePath);
+    const probePath = remoteDir === '.' ? probeKey : remoteDir + '/' + probeKey;
+    await client.put(Buffer.from('figwright-connection-test'), probePath);
+    await client.delete(probePath);
     return { ok: true, error: `连接成功（目录 ${list.length} 项），且可写入远程目录` };
   } catch (e) {
     const msg = e.message || String(e);
