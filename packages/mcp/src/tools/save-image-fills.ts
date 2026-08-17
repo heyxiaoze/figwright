@@ -10,7 +10,7 @@ import type {
 } from '@figwright/shared';
 import { z } from 'zod';
 
-import { getTransferManager } from '../transfer.js';
+import { getTransferManager, ASSET_TOKEN_RESULT_NOTE } from '../transfer.js';
 import type { ToolSpec } from './spec.js';
 
 export const SAVE_IMAGE_FILLS_TOOL_NAME = 'save_image_fills';
@@ -233,7 +233,7 @@ export const writeImageFills = async (
     }
   }
 
-  return { nodes: outNodes };
+  return { nodes: outNodes, ...(transferActive ? { note: ASSET_TOKEN_RESULT_NOTE } : {}) };
 };
 
 export type ToolDispatcher = (toolName: string, args: unknown) => Promise<unknown>;

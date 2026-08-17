@@ -11,7 +11,7 @@ import {
 import { z } from 'zod';
 
 import { GET_SCREENSHOT_TOOL_NAME } from './get-screenshot.js';
-import { getTransferManager } from '../transfer.js';
+import { getTransferManager, ASSET_TOKEN_RESULT_NOTE } from '../transfer.js';
 import type { ToolSpec } from './spec.js';
 
 export const SAVE_SCREENSHOTS_TOOL_NAME = 'save_screenshots';
@@ -119,7 +119,7 @@ export const writeScreenshots = async (
     }),
   );
 
-  return { saved };
+  return { saved, ...(mgr ? { note: ASSET_TOKEN_RESULT_NOTE } : {}) };
 };
 
 export type ToolDispatcher = (toolName: string, args: unknown) => Promise<unknown>;

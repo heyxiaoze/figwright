@@ -86,7 +86,13 @@ export const SavedScreenshotSchema = z.object({
 });
 export type SavedScreenshot = z.infer<typeof SavedScreenshotSchema>;
 
-export const SaveScreenshotsResultSchema = z.object({ saved: z.array(SavedScreenshotSchema) });
+export const SaveScreenshotsResultSchema = z.object({
+  saved: z.array(SavedScreenshotSchema),
+  // Shown only in remote-transfer mode (WebDAV/SFTP configured). Tells the consuming agent, in the
+  // tool result itself (not just the schema description), that base64 was omitted and it must pull
+  // bytes via fetch_asset(token) rather than reading `path`.
+  note: z.string().optional(),
+});
 export type SaveScreenshotsResult = z.infer<typeof SaveScreenshotsResultSchema>;
 
 // ── export_pdf ───────────────────────────────────────────────────────────────
@@ -234,7 +240,13 @@ export const SavedNodeImageFillsSchema = z.object({
 });
 export type SavedNodeImageFills = z.infer<typeof SavedNodeImageFillsSchema>;
 
-export const SaveImageFillsResultSchema = z.object({ nodes: z.array(SavedNodeImageFillsSchema) });
+export const SaveImageFillsResultSchema = z.object({
+  nodes: z.array(SavedNodeImageFillsSchema),
+  // Shown only in remote-transfer mode (WebDAV/SFTP configured). Tells the consuming agent, in the
+  // tool result itself (not just the schema description), that base64 was omitted and it must pull
+  // bytes via fetch_asset(token) rather than reading `path`.
+  note: z.string().optional(),
+});
 export type SaveImageFillsResult = z.infer<typeof SaveImageFillsResultSchema>;
 
 // ── get_viewport ───────────────────────────────────────────────────────────

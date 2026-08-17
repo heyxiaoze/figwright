@@ -14,6 +14,19 @@ import { randomBytes } from 'node:crypto';
 
 export type TransferMode = 'inline' | 'webdav' | 'sftp';
 
+/**
+ * Carried in the `note` field of save_* results ONLY when a transfer target is active. This is the
+ * in-result nudge that tells a remote partner agent (in the tool output it actually reads) how to
+ * retrieve the bytes — so it never has to be relayed manually. Base64 is intentionally omitted in
+ * this mode; the partner must call fetch_asset(token) and must NOT read `path` (server-side only).
+ */
+export const ASSET_TOKEN_RESULT_NOTE =
+  'REMOTE TRANSFER MODE: base64 is OMITTED from this result (to keep responses small). For every ' +
+  'image that carries an `assetToken`, you MUST call fetch_asset({ token }) to pull its bytes over ' +
+  'the MCP connection, then write them into your OWN machine\'s asset directory. Do NOT use the ' +
+  '`path` field — it is a server-side filesystem path and is unreachable from your machine. Only ' +
+  'when `assetToken` is ABSENT (inline mode) is `base64` returned.';
+
 export interface WebDavConfig {
   /** WebDAV root, e.g. https://dav.example.com/remote.php/webdav */
   url: string;
