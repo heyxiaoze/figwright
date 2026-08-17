@@ -24,6 +24,7 @@ import { randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
+import { createRequire } from 'node:module';
 import { networkInterfaces, platform } from 'node:os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -283,19 +284,30 @@ function buildGuide() {
 // 认证是否有效、以及暂存所需的写入权限是否具备。凭据不出本机。
 // ----------------------------------------------------------------------------
 async function loadSftpClient() {
-  // dashboard.mjs 在 scripts/，ssh2-sftp-client 装在 @figwright/mcp 包；优先按 mcp 包路径解析，
-  // 失败再回退裸名（若被 hoist）。两者都不行则给出明确的安装提示。
+  // dashboard.mjs 在 scripts/，而 ssh2-sftp-client 装在 @figwright/mcp 包里。pnpm 严格模式下
+  // 裸名 ``ssh2-sftp-client`` 从 scripts/ 解析不到；直接 ``import()`` symlink 目录又会触发
+  // ERR_UNSUPPORTED_DIR_IMPORT（Node ESM 只允许 import 文件或走包解析的裸名）。
+  // 因此先用 createRequire 把包的真实入口文件解析出来，再 import 该文件——无论是否被 hoist 都能命中。
+  const req = createRequire(import.meta.url);
   const candidates = [
-    'ssh2-sftp-client',
-    join(REPO_ROOT, 'packages/mcp/node_modules/ssh2-sftp-client'),
+    // 1) 裸名（若已被 hoist 到可解析位置）
+    () => import('ssh2-sftp-client'),
+    // 2) 解析 @figwright/mcp 包内的真实入口文件后 import
+    () => {
+      const entry = req.resolve('ssh2-sftp-client', {
+        paths: [join(REPO_ROOT, 'packages/mcp/node_modules')],
+      });
+      return import(entry);
+    },
   ];
-  for (const spec of candidates) {
+  let lastErr;
+  for (const attempt of candidates) {
     try {
-      const mod = await import(spec);
+      const mod = await attempt();
       if (mod.default) return mod.default;
       if (mod.Client) return mod.Client;
-    } catch {
-      /* try next */
+    } catch (e) {
+      lastErr = e;
     }
   }
   throw new Error('SFTP 依赖未安装：请先在 @figwright/mcp 包运行 pnpm --filter @figwright/mcp add ssh2-sftp-client');
