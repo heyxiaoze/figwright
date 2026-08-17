@@ -170,17 +170,44 @@ interface StagedEntry {
 
 /**
  * Mints one-time tokens for staged assets and resolves them on fetch. Tokens live only in memory in
- * the leader process and expire after `ttlMs`, after which the staged file is garbage-collected.
+ * the leader process and expire after `ttlMs`. Expired staging files are reclaimed by a background
+ * sweep (see below) — without it, any token the partner never redeems (e.g. its agent expected
+ * inline base64 and never called fetch_asset) would leave its file on WebDAV/SFTP forever.
  */
 export class TransferManager {
   private readonly tokens = new Map<string, StagedEntry>();
   private readonly ttlMs: number;
+  private readonly sweepTimer: ReturnType<typeof setInterval>;
 
   constructor(
     private readonly store: AssetStore,
     ttlMs = 10 * 60 * 1000,
   ) {
     this.ttlMs = ttlMs;
+    // Proactively reap expired staged files. The token Map entry alone does NOT delete the bytes on
+    // the remote store — only fetch_asset(token) does, and partners that never redeem a token (or
+    // crash before fetching) would otherwise orphan files indefinitely. Sweeping here guarantees
+    // reclamation ~1 min after expiry regardless of partner behaviour. unref so this timer never
+    // keeps the event loop (and thus the server process) alive on its own.
+    this.sweepTimer = setInterval(() => {
+      const now = Date.now();
+      for (const [token, entry] of this.tokens) {
+        if (entry.expires >= now) continue;
+        this.tokens.delete(token);
+        void this.store
+          .remove(entry.key)
+          .then(
+            () => process.stderr.write(`[figwright] swept expired staged asset: ${entry.key}\n`),
+            () => process.stderr.write(`[figwright] failed to sweep staged asset: ${entry.key}\n`),
+          );
+      }
+    }, 60_000);
+    this.sweepTimer.unref?.();
+  }
+
+  /** Stop the background sweep (called on shutdown). */
+  dispose(): void {
+    clearInterval(this.sweepTimer);
   }
 
   /** Stage bytes and return a one-time token the partner can redeem via fetch_asset. */
