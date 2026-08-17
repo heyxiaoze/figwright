@@ -12,7 +12,6 @@ export const RPC_PATH = '/rpc';
 export const ABDICATE_PATH = '/abdicate';
 // The remote MCP endpoint is served by a separate handler mounted after this one; requests for it
 // fall through here untouched rather than hitting the 404 at the bottom of this handler.
-const MCP_PATH = '/mcp';
 
 /**
  * Refuse to abdicate while relay traffic is this recent, even with nothing in flight: a multi-call
@@ -108,9 +107,12 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
   };
 
   const handler = (req: IncomingMessage, res: ServerResponse): void => {
-    // Remote MCP requests are handled by attachMcpHttp (mounted after this handler). Leave them
-    // untouched so that handler can answer — do not 404 them here.
-    if (req.url === MCP_PATH || (req.url ?? '').startsWith(`${MCP_PATH}?`)) return;
+    // This listener shares the HTTP server with attachMcpHttp (registered after this one). Anything
+    // we don't own — /mcp, /asset/<token>, and any other path — must be left untouched so that
+    // handler can answer, otherwise a second `res.writeHead()` on the same response crashes the
+    // process with ERR_HTTP_HEADERS_SENT (this listener is NOT exclusive to its own paths).
+    const url = req.url ?? '/';
+    if (url !== PING_PATH && url !== RPC_PATH && url !== ABDICATE_PATH) return;
 
     // Addressed by a name that isn't ours: DNS rebinding, where the browser thinks it is talking to
     // the attacker's domain and so both omits Origin and gets to read the reply. In LAN mode
