@@ -10,8 +10,11 @@ import type { Relay } from '../relay/relay.js';
 export const PING_PATH = '/ping';
 export const RPC_PATH = '/rpc';
 export const ABDICATE_PATH = '/abdicate';
-// The remote MCP endpoint is served by a separate handler mounted after this one; requests for it
-// fall through here untouched rather than hitting the 404 at the bottom of this handler.
+// The remote MCP endpoint (attachMcpHttp) is served by a separate handler mounted after this one,
+// which answers /mcp and /asset/<token>; requests for those paths fall through here untouched
+// rather than hitting the 404 at the bottom of this handler.
+const MCP_PATH = '/mcp';
+const ASSET_PATH = '/asset/';
 
 /**
  * Refuse to abdicate while relay traffic is this recent, even with nothing in flight: a multi-call
@@ -107,12 +110,12 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
   };
 
   const handler = (req: IncomingMessage, res: ServerResponse): void => {
-    // This listener shares the HTTP server with attachMcpHttp (registered after this one). Anything
-    // we don't own — /mcp, /asset/<token>, and any other path — must be left untouched so that
-    // handler can answer, otherwise a second `res.writeHead()` on the same response crashes the
-    // process with ERR_HTTP_HEADERS_SENT (this listener is NOT exclusive to its own paths).
+    // This listener shares the HTTP server with attachMcpHttp (registered after this one), which
+    // answers /mcp and /asset/<token>. Leave those paths untouched — writing a response here too
+    // would race the one mcp-http writes and crash the process with ERR_HTTP_HEADERS_SENT (the
+    // server already died once from exactly this). Unknown paths stay ours: the 404 at the bottom.
     const url = req.url ?? '/';
-    if (url !== PING_PATH && url !== RPC_PATH && url !== ABDICATE_PATH) return;
+    if (url === MCP_PATH || url.startsWith(`${MCP_PATH}?`) || url.startsWith(ASSET_PATH)) return;
 
     // Addressed by a name that isn't ours: DNS rebinding, where the browser thinks it is talking to
     // the attacker's domain and so both omits Origin and gets to read the reply. In LAN mode
