@@ -1,4 +1,4 @@
-import { createServer, type Server as HttpServer } from 'node:http';
+import { createServer, type IncomingMessage, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 import {
@@ -127,16 +127,20 @@ describe('Relay upgrade gating', () => {
 });
 
 describe('Relay is loopback-only', () => {
+  // isRelayUpgradeAllowed takes a full IncomingMessage; the tests only model its socket.
+  const upgradeFrom = (remoteAddress: string | undefined): boolean =>
+    isRelayUpgradeAllowed({ socket: { remoteAddress } } as unknown as IncomingMessage);
+
   it('admits an upgrade from a same-machine address', () => {
-    expect(isRelayUpgradeAllowed({ socket: { remoteAddress: '127.0.0.1' } })).toBe(true);
-    expect(isRelayUpgradeAllowed({ socket: { remoteAddress: '::1' } })).toBe(true);
-    expect(isRelayUpgradeAllowed({ socket: { remoteAddress: '::ffff:127.0.0.1' } })).toBe(true);
+    expect(upgradeFrom('127.0.0.1')).toBe(true);
+    expect(upgradeFrom('::1')).toBe(true);
+    expect(upgradeFrom('::ffff:127.0.0.1')).toBe(true);
   });
 
   it('refuses an upgrade from any other machine on the network', () => {
-    expect(isRelayUpgradeAllowed({ socket: { remoteAddress: '192.168.1.5' } })).toBe(false);
-    expect(isRelayUpgradeAllowed({ socket: { remoteAddress: '10.0.0.2' } })).toBe(false);
-    expect(isRelayUpgradeAllowed({ socket: { remoteAddress: undefined } })).toBe(false);
+    expect(upgradeFrom('192.168.1.5')).toBe(false);
+    expect(upgradeFrom('10.0.0.2')).toBe(false);
+    expect(upgradeFrom(undefined)).toBe(false);
   });
 });
 

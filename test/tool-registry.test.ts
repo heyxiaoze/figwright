@@ -15,7 +15,8 @@ import { createSandboxHandlers } from '../packages/plugin/src/handlers/registry.
 // handler. save_screenshots is composed server-side from get_screenshot + filesystem writes;
 // analyze_project / scan_components / component_map / token_map / icon_map read the local project
 // filesystem (component_map / icon_map reuse get_design_context, token_map reuses get_variable_defs) and
-// never touch the sandbox.
+// never touch the sandbox; fetch_asset redeems a staged-asset token against the server's own
+// WebDAV/SFTP store (kind 'local') — no Figma round-trip.
 const SERVER_ONLY_TOOLS = new Set([
   'save_screenshots',
   'analyze_project',
@@ -24,6 +25,7 @@ const SERVER_ONLY_TOOLS = new Set([
   'token_map',
   'icon_map',
   'design_diff',
+  'fetch_asset',
 ]);
 
 const serverNames = ALL_TOOL_SPECS.map(s => s.name);

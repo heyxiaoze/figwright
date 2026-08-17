@@ -53,7 +53,12 @@ export const createSaveImageFillsHandler =
           } catch {
             /* dimensions unavailable — omit them; bytes are still valid */
           }
-          return { base64: figmaCtx.base64Encode(bytes), width, height };
+          // exactOptionalPropertyTypes: spread only the dimensions that actually resolved.
+          return {
+            base64: figmaCtx.base64Encode(bytes),
+            ...(width !== undefined ? { width } : {}),
+            ...(height !== undefined ? { height } : {}),
+          };
         })();
         cache.set(hash, pending);
       }

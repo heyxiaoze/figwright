@@ -11,3 +11,7 @@ onlyBuiltDependencies:
   - ssh2
 
 minimumReleaseAge: 0
+
+allowBuilds:
+  cpu-features: true
+  ssh2: true

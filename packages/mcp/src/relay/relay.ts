@@ -41,9 +41,10 @@ export const isRelayUpgradeAllowed = (req: IncomingMessage): boolean =>
  * than misclassified as remote with an "unknown" IP.
  */
 const remoteIpOf = (socket: WebSocket): string => {
-  const a =
-    socket.remoteAddress ??
-    (socket as unknown as { _socket?: { remoteAddress?: string } })._socket?.remoteAddress;
+  // `WebSocket.remoteAddress` isn't on the ws public type — it's usually present at runtime, with
+  // the underlying socket as fallback, so cast once and read both.
+  const s = socket as unknown as { remoteAddress?: string; _socket?: { remoteAddress?: string } };
+  const a = s.remoteAddress ?? s._socket?.remoteAddress;
   return a ?? 'unknown';
 };
 

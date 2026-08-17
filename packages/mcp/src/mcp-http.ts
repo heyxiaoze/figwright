@@ -265,7 +265,8 @@ export const serveAsset = async (
   log: (msg: string) => void,
 ): Promise<void> => {
   const reqUrl = req.url ?? '';
-  const token = decodeURIComponent(reqUrl.slice(ASSET_PATH.length).split('?')[0]);
+  // split('?')[0] is `string | undefined` under noUncheckedIndexedAccess — '' then fails the token regex.
+  const token = decodeURIComponent(reqUrl.slice(ASSET_PATH.length).split('?')[0] ?? '');
   if (!ASSET_TOKEN_RE.test(token)) {
     res.writeHead(400, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ error: 'bad asset token' }));

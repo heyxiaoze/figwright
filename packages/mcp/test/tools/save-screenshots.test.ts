@@ -82,8 +82,8 @@ describe('writeScreenshots', () => {
     const result = await writeScreenshots(dir, images);
 
     expect(result.saved).toEqual([
-      { nodeId: '1:1', format: 'PNG', path: join(dir, '1-1.png'), base64: 'AAAA' },
-      { nodeId: '2:3', format: 'SVG', path: join(dir, '2-3.svg'), base64: 'BBBB' },
+      { nodeId: '1:1', format: 'PNG', path: '1-1.png', base64: 'AAAA' },
+      { nodeId: '2:3', format: 'SVG', path: '2-3.svg', base64: 'BBBB' },
     ]);
     expect((await readFile(join(dir, '1-1.png'))).toString('base64')).toBe('AAAA');
     expect((await readFile(join(dir, '2-3.svg'))).toString('base64')).toBe('BBBB');
@@ -102,7 +102,7 @@ describe('writeScreenshots', () => {
       { nodeId: '1:1', format: 'PNG', base64: 'AAAA', empty: true },
     ]);
     expect(result.saved).toEqual([
-      { nodeId: '1:1', format: 'PNG', path: join(dir, '1-1.png'), base64: 'AAAA', empty: true },
+      { nodeId: '1:1', format: 'PNG', path: '1-1.png', base64: 'AAAA', empty: true },
     ]);
   });
 });
@@ -129,7 +129,7 @@ describe('handleSaveScreenshots', () => {
     expect(result.saved[0]).toEqual({
       nodeId: '1:1',
       format: 'PNG',
-      path: join(dir, '1-1.png'),
+      path: '1-1.png',
       base64: 'AAAA',
     });
     expect((await readFile(join(dir, '1-1.png'))).toString('base64')).toBe('AAAA');
@@ -170,10 +170,12 @@ describe('save_screenshots — WebDAV/SFTP staging (assetToken)', () => {
       { nodeId: '2:3', format: 'SVG', base64: 'BBBB' },
     ]);
 
-    // Every exported image carries a token; base64 is still present as a fallback.
+    // Every exported image carries a token; base64 is intentionally OMITTED in transfer mode —
+    // the partner pulls bytes via fetch_asset, so responses stay small.
     const tokens = result.saved.map(s => s.assetToken).filter(Boolean);
     expect(tokens).toHaveLength(2);
-    expect(result.saved[0]?.base64).toBe('AAAA');
+    expect(result.saved[0]?.base64).toBeUndefined();
+    expect(result.note).toContain('fetch_asset');
 
     // A partner redeeming the token gets the exact bytes, and the staged copy is consumed.
     const first = await mgr.fetch(tokens[0]!);
@@ -183,7 +185,7 @@ describe('save_screenshots — WebDAV/SFTP staging (assetToken)', () => {
     expect(store.files.size).toBe(1); // second copy still staged until fetched
   });
 
-  it('falls back to inline base64 when staging throws (manager stays unset otherwise)', async () => {
+  it('aborts the whole save when staging throws (no silent base64 fallback)', async () => {
     const boom = new FakeStore();
     boom.upload = async () => {
       throw new Error('staging down');
@@ -191,10 +193,10 @@ describe('save_screenshots — WebDAV/SFTP staging (assetToken)', () => {
     setTransferManager(new TransferManager(boom));
 
     const dir = await makeDir();
-    const result = await writeScreenshots(dir, [{ nodeId: '1:1', format: 'PNG', base64: 'AAAA' }]);
-    // No token emitted, but the file is on disk and base64 is still returned — graceful degradation.
-    expect(result.saved[0]?.assetToken).toBeUndefined();
-    expect(result.saved[0]?.base64).toBe('AAAA');
-    expect(result.saved[0]?.path).not.toBeNull();
+    // Staging is part of the save: a transfer failure must surface rather than silently degrade
+    // to inline base64 (which would bloat the remote LLM's context).
+    await expect(
+      writeScreenshots(dir, [{ nodeId: '1:1', format: 'PNG', base64: 'AAAA' }]),
+    ).rejects.toThrow('staging down');
   });
 });

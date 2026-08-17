@@ -51,7 +51,7 @@ The console (`:3056`) launches and supervises the relay (`:3055`). Local agents 
 
 | Capability | Notes |
 | :--- | :--- |
-| **Bidirectional** | 112 MCP tools — read designs *and* write them back to the canvas. |
+| **Bidirectional** | **113 MCP tools** — read designs *and* write them back to the canvas. |
 | **Stack-aware codegen** | Reuses your real components, design tokens, and icons. |
 | **Web console** | Zero-dependency dashboard; live stats, tokens, peers, audit, log. |
 | **Remote collaboration** | `mcp-remote` or `http` MCP clients connect to your relay over LAN. |

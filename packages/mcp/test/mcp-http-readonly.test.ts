@@ -96,16 +96,16 @@ const listTools = async (base: string, token: string): Promise<string[]> => {
     }),
   });
   expect(initRes.status).toBe(200);
-  const sid = initRes.headers.get('mcp-session-id');
-  expect(sid).toBeTruthy();
+  // Stateless-tolerant mode (sessionIdGenerator: undefined) issues no session id — subsequent
+  // requests must succeed WITHOUT the Mcp-Session-Id header (that tolerance is the feature).
   await fetch(`${base}/mcp`, {
     method: 'POST',
-    headers: headers(sid!),
+    headers: headers(),
     body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} }),
   });
   const listRes = await fetch(`${base}/mcp`, {
     method: 'POST',
-    headers: headers(sid!),
+    headers: headers(),
     body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }),
   });
   const json = (await listRes.json()) as { result?: { tools?: Array<{ name: string }> } };

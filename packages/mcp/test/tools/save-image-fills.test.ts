@@ -128,7 +128,7 @@ describe('writeImageFills', () => {
               imageHash: 'abcHASH',
               base64: PNG_B64,
               format: 'PNG',
-              path: join(dir, 'abchash.png'),
+              path: 'abchash.png',
               relativePath: 'abchash.png',
               width: 200,
               height: 100,
@@ -139,7 +139,7 @@ describe('writeImageFills', () => {
               imageHash: 'jpgHASH',
               base64: JPG_B64,
               format: 'JPG',
-              path: join(dir, 'jpghash.jpg'),
+              path: 'jpghash.jpg',
               relativePath: 'jpghash.jpg',
               scaleMode: 'CROP',
             },
@@ -164,12 +164,15 @@ describe('writeImageFills', () => {
       },
     ];
     const result = await writeImageFills(dir, nodes);
-    const shared = join(dir, 'logo.png');
+    // path is outDir-relative (never the server's absolute filesystem path — remote peers see a
+    // clean name); relativePath mirrors it for convenience.
+    const shared = 'logo.png';
+    const sharedAbs = join(dir, 'logo.png');
     expect(result.nodes[0]?.images[0]?.path).toBe(shared);
     expect(result.nodes[1]?.images[0]?.path).toBe(shared);
     expect(result.nodes[0]?.images[0]?.relativePath).toBe('logo.png');
     expect(result.nodes[1]?.images[0]?.relativePath).toBe('logo.png');
-    expect((await readFile(shared)).toString('base64')).toBe(PNG_B64);
+    expect((await readFile(sharedAbs)).toString('base64')).toBe(PNG_B64);
   });
 
   it('returns path null (no write) for an unresolved image and passes mixed through', async () => {
@@ -210,12 +213,12 @@ describe('writeImageFills', () => {
       },
     ];
     const result = await writeImageFills(dir, nodes);
-    const expected = join(dir, 'IMG-blog-1-cover.png');
+    const expected = 'IMG-blog-1-cover.png';
     expect(result.nodes[0]?.nodeName).toBe('Cover');
     expect(result.nodes[0]?.parentName).toBe('Blog-1');
     expect(result.nodes[0]?.images[0]?.path).toBe(expected);
-    expect(result.nodes[0]?.images[0]?.relativePath).toBe('IMG-blog-1-cover.png');
-    expect((await readFile(expected)).toString('base64')).toBe(PNG_B64);
+    expect(result.nodes[0]?.images[0]?.relativePath).toBe(expected);
+    expect((await readFile(join(dir, expected))).toString('base64')).toBe(PNG_B64);
   });
 
   it('falls back to IMG-[name] when there is no parent layer name', async () => {
@@ -228,7 +231,7 @@ describe('writeImageFills', () => {
       },
     ];
     const result = await writeImageFills(dir, nodes);
-    expect(result.nodes[0]?.images[0]?.path).toBe(join(dir, 'IMG-hero-photo.png'));
+    expect(result.nodes[0]?.images[0]?.path).toBe('IMG-hero-photo.png');
     expect(result.nodes[0]?.images[0]?.relativePath).toBe('IMG-hero-photo.png');
   });
 
@@ -245,8 +248,8 @@ describe('writeImageFills', () => {
       },
     ];
     const result = await writeImageFills(dir, nodes);
-    expect(result.nodes[0]?.images[0]?.path).toBe(join(dir, 'IMG-banner-0.png'));
-    expect(result.nodes[0]?.images[1]?.path).toBe(join(dir, 'IMG-banner-3.jpg'));
+    expect(result.nodes[0]?.images[0]?.path).toBe('IMG-banner-0.png');
+    expect(result.nodes[0]?.images[1]?.path).toBe('IMG-banner-3.jpg');
     expect(result.nodes[0]?.images[0]?.relativePath).toBe('IMG-banner-0.png');
     expect(result.nodes[0]?.images[1]?.relativePath).toBe('IMG-banner-3.jpg');
   });
@@ -258,11 +261,12 @@ describe('writeImageFills', () => {
       { nodeId: '2:2', nodeName: 'Brand', images: [{ index: 0, imageHash: 'logo', base64: PNG_B64 }] },
     ];
     const result = await writeImageFills(dir, nodes);
-    const shared = join(dir, 'IMG-logo.png');
+    const shared = 'IMG-logo.png';
+    const sharedAbs = join(dir, 'IMG-logo.png');
     expect(result.nodes[0]?.images[0]?.path).toBe(shared);
     expect(result.nodes[1]?.images[0]?.path).toBe(shared);
-    expect(result.nodes[0]?.images[0]?.relativePath).toBe('IMG-logo.png');
-    expect((await readFile(shared)).toString('base64')).toBe(PNG_B64);
+    expect(result.nodes[0]?.images[0]?.relativePath).toBe(shared);
+    expect((await readFile(sharedAbs)).toString('base64')).toBe(PNG_B64);
   });
 
   it('falls back to the hash name when two different images sanitize to the same path', async () => {
@@ -272,10 +276,10 @@ describe('writeImageFills', () => {
       { nodeId: '2:2', nodeName: 'Pic', images: [{ index: 0, imageHash: 'bbb', base64: PNG_B64 }] },
     ];
     const result = await writeImageFills(dir, nodes);
-    expect(result.nodes[0]?.images[0]?.path).toBe(join(dir, 'IMG-pic.png'));
+    expect(result.nodes[0]?.images[0]?.path).toBe('IMG-pic.png');
     expect(result.nodes[0]?.images[0]?.relativePath).toBe('IMG-pic.png');
     // Second "Pic" (same name + extension, different hash) collides → hash-named fallback.
-    expect(result.nodes[1]?.images[0]?.path).toBe(join(dir, 'bbb-0.png'));
+    expect(result.nodes[1]?.images[0]?.path).toBe('bbb-0.png');
     expect(result.nodes[1]?.images[0]?.relativePath).toBe('bbb-0.png');
   });
 });
@@ -302,7 +306,7 @@ describe('handleSaveImageFills', () => {
       imageHash: 'h',
       base64: PNG_B64,
       format: 'PNG',
-      path: join(dir, 'h.png'),
+      path: 'h.png',
       relativePath: 'h.png',
     });
     expect((await readFile(join(dir, 'h.png'))).toString('base64')).toBe(PNG_B64);
@@ -335,8 +339,10 @@ describe('writeImageFills — WebDAV/SFTP staging (assetToken)', () => {
 
     const tokens = result.nodes[0]!.images.map(i => i.assetToken).filter(Boolean);
     expect(tokens).toHaveLength(2);
-    // base64 still present as a fallback alongside the token.
-    expect(result.nodes[0]!.images[0]!.base64).toBe(PNG_B64);
+    // Transfer mode: base64 is intentionally OMITTED — the partner pulls bytes via fetch_asset.
+    expect(result.nodes[0]!.images[0]!.base64).toBeUndefined();
+    // And the in-result note tells the partner agent how to retrieve the bytes.
+    expect(result.note).toContain('fetch_asset');
 
     const first = await mgr.fetch(tokens[0]!);
     expect(first).not.toBeNull();
@@ -344,7 +350,7 @@ describe('writeImageFills — WebDAV/SFTP staging (assetToken)', () => {
     expect(await mgr.fetch(tokens[0]!)).toBeNull(); // one-time
   });
 
-  it('falls back to inline base64 when staging throws', async () => {
+  it('aborts the whole save when staging throws (no silent base64 fallback)', async () => {
     const boom = new FakeStore();
     boom.upload = async () => {
       throw new Error('staging down');
@@ -355,9 +361,8 @@ describe('writeImageFills — WebDAV/SFTP staging (assetToken)', () => {
     const nodes: NodeImageFills[] = [
       { nodeId: '1:1', images: [{ index: 0, imageHash: 'abcHASH', base64: PNG_B64, scaleMode: 'FILL' }] },
     ];
-    const result = await writeImageFills(dir, nodes);
-    expect(result.nodes[0]!.images[0]!.assetToken).toBeUndefined();
-    expect(result.nodes[0]!.images[0]!.base64).toBe(PNG_B64);
-    expect(result.nodes[0]!.images[0]!.path).not.toBeNull();
+    // Staging is part of the save: a transfer failure must surface, not silently drop the token
+    // and fall back to inline base64 (which would bloat the remote LLM's context).
+    await expect(writeImageFills(dir, nodes)).rejects.toThrow('staging down');
   });
 });

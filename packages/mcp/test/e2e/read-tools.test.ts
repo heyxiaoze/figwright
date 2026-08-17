@@ -578,8 +578,9 @@ describe('e2e save_screenshots', () => {
       );
 
       const written = result.saved[0]?.path;
-      expect(written).toBe(join(dir, '1-1.png'));
-      expect((await readFile(written as string)).toString('base64')).toBe('AAAA');
+      // path is outDir-relative (never the server's absolute filesystem path).
+      expect(written).toBe('1-1.png');
+      expect((await readFile(join(dir, written as string))).toString('base64')).toBe('AAAA');
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

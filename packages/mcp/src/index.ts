@@ -53,7 +53,7 @@ const SERVER_NAME = 'figwright';
 // (checkPluginCompatibility always returns true), so it no longer has to satisfy the semver
 // comparator in packages/shared/src/version.ts.
 const APP_VERSION_MAJOR = 1;
-const APP_VERSION_MINOR = '0'; // bump +1 on each release — mirrors vite.config.ts / dashboard.mjs
+const APP_VERSION_MINOR = '1'; // bump +1 on each release — mirrors vite.config.ts / dashboard.mjs
 
 function resolveServerVersion(): string {
   try {
@@ -114,18 +114,21 @@ if (LAN_MODE) {
     );
   }
   tokens = buildTokenRegistry({
-    legacyToken: legacy,
-    tokensJson,
-    autoToken,
+    // exactOptionalPropertyTypes: only set optional keys when actually present ('' counts as unset).
+    ...(legacy !== undefined && legacy !== '' ? { legacyToken: legacy } : {}),
+    ...(tokensJson !== undefined ? { tokensJson } : {}),
+    ...(autoToken !== undefined ? { autoToken } : {}),
     serverReadonly: READONLY,
   });
   log(`[figwright] LAN mode (host ${HOST}) — ${tokens.list().length} token(s) accepted`);
 } else if (process.env.FIGWRIGHT_TOKEN !== undefined || process.env.FIGWRIGHT_TOKENS !== undefined) {
   // Loopback bind but a token was explicitly supplied — honour it (harmless, and lets a local agent
   // authenticate the same way a remote one would).
+  const legacy2 = process.env.FIGWRIGHT_TOKEN;
+  const tokensJson2 = process.env.FIGWRIGHT_TOKENS;
   tokens = buildTokenRegistry({
-    legacyToken: process.env.FIGWRIGHT_TOKEN,
-    tokensJson: process.env.FIGWRIGHT_TOKENS,
+    ...(legacy2 !== undefined && legacy2 !== '' ? { legacyToken: legacy2 } : {}),
+    ...(tokensJson2 !== undefined ? { tokensJson: tokensJson2 } : {}),
     serverReadonly: READONLY,
   });
 }

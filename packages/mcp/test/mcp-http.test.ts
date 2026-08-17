@@ -22,7 +22,7 @@ async function start(token: string | undefined): Promise<Harness> {
   const http: Server = createServer();
   const mcp = new McpServer({ name: 'figwright-test', version: '0.0.0' });
   // null → loopback posture (no auth); otherwise a single-entry registry from the legacy token.
-  const tokens = token === undefined ? null : buildTokenRegistry({ legacyToken: token });
+  const tokens = token === undefined ? null : buildTokenRegistry({ legacyToken: token, serverReadonly: false });
   const detach = attachMcpHttp(http, {
     createServer: () => mcp,
     tokens,
@@ -82,25 +82,27 @@ describe('attachMcpHttp', () => {
     expect(res.status).toBe(403);
   });
 
-  it('accepts /mcp with x-figwright-token and returns a session id', async () => {
+  it('accepts /mcp with x-figwright-token (stateless: no session id issued)', async () => {
     h = await start(TOKEN);
     const res = await initialize(h.base, { 'x-figwright-token': TOKEN });
     expect(res.status).toBe(200);
-    expect(res.headers.get('mcp-session-id')).toBeTruthy();
+    // Stateless-tolerant mode (sessionIdGenerator: undefined) issues no session id — clients that
+    // drop Mcp-Session-Id after initialize keep working, which is the whole point.
+    expect(res.headers.get('mcp-session-id')).toBeNull();
   });
 
-  it('accepts Authorization: Bearer <token>', async () => {
+  it('accepts Authorization: Bearer <token> (stateless: no session id issued)', async () => {
     h = await start(TOKEN);
     const res = await initialize(h.base, { authorization: `Bearer ${TOKEN}` });
     expect(res.status).toBe(200);
-    expect(res.headers.get('mcp-session-id')).toBeTruthy();
+    expect(res.headers.get('mcp-session-id')).toBeNull();
   });
 
   it('does not gate /mcp when no token is configured (loopback posture)', async () => {
     h = await start(undefined);
     const res = await initialize(h.base, {});
     expect(res.status).toBe(200);
-    expect(res.headers.get('mcp-session-id')).toBeTruthy();
+    expect(res.headers.get('mcp-session-id')).toBeNull();
   });
 
   it('leaves non-/mcp paths to other handlers (fallback answers 418)', async () => {
