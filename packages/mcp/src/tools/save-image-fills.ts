@@ -91,6 +91,17 @@ export const detectImageFormat = (bytes: Buffer): { format: string; ext: string 
  * (spaces, punctuation, non-ASCII) collapses to a single hyphen, runs of hyphens are merged, and
  * leading/trailing hyphens are trimmed. An empty result falls back to 'image'.
  */
+/**
+ * Normalize an outDir supplied by a caller before resolving it on the server. A remote partner often
+ * passes its OWN machine's path (e.g. `c:\project\public\images`). On the server OS that string is
+ * neither a drive nor a separator, so path.resolve() would append it verbatim under the server cwd
+ * and produce a garbage path like `<repo>/c:\project\...`. Strip a Windows drive prefix and turn
+ * backslashes into forward slashes so the value becomes a clean relative sub-folder. Absolute POSIX
+ * paths (local same-machine use) are left intact.
+ */
+const normalizeOutDir = (raw: string): string =>
+  raw.replace(/^[A-Za-z]:[\\/]+/, '').replace(/\\/g, '/').trim();
+
 const sanitize = (name: string): string => {
   const cleaned = name
     .toLowerCase()
@@ -130,7 +141,7 @@ export const writeImageFills = async (
   outDir: string,
   nodes: readonly NodeImageFills[],
 ): Promise<SaveImageFillsResult> => {
-  const dir = resolve(outDir);
+  const dir = resolve(normalizeOutDir(outDir));
   await mkdir(dir, { recursive: true });
 
   // Dedup writes by imageHash: a hash reused across nodes maps to one file written once. Track the

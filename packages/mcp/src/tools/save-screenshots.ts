@@ -47,6 +47,17 @@ export const saveScreenshotsTool: ToolSpec = {
 };
 const EXTENSIONS: Record<string, string> = { PNG: 'png', JPG: 'jpg', SVG: 'svg' };
 
+/**
+ * Normalize an outDir supplied by a caller before resolving it on the server. A remote partner often
+ * passes its OWN machine's path (e.g. `c:\project\public\images`). On the server OS that string is
+ * neither a drive nor a separator, so path.resolve() would append it verbatim under the server cwd
+ * and produce a garbage path like `<repo>/c:\project\...`. Strip a Windows drive prefix and turn
+ * backslashes into forward slashes so the value becomes a clean relative sub-folder. Absolute POSIX
+ * paths (local same-machine use) are left intact.
+ */
+const normalizeOutDir = (raw: string): string =>
+  raw.replace(/^[A-Za-z]:[\\/]+/, '').replace(/\\/g, '/').trim();
+
 /** Map a Figma node id (e.g. "1:2") to a filesystem-safe basename, blocking path traversal. */
 const sanitize = (id: string): string => id.replace(/[^\w.-]/g, '-');
 
@@ -58,7 +69,7 @@ export const writeScreenshots = async (
   outDir: string,
   images: readonly ScreenshotImage[],
 ): Promise<SaveScreenshotsResult> => {
-  const dir = resolve(outDir);
+  const dir = resolve(normalizeOutDir(outDir));
   await mkdir(dir, { recursive: true });
 
   const saved: SavedScreenshot[] = await Promise.all(
