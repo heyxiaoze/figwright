@@ -68,7 +68,12 @@ export const SavedScreenshotSchema = z.object({
   nodeId: z.string(),
   format: z.string(),
   path: z.string().nullable(),
-  base64: z.string().nullable(),
+  /**
+   * Original encoded bytes for a remote partner to decode onto its own disk — returned ONLY in
+   * inline mode (no WebDAV/SFTP transfer target). When a transfer target is configured, base64 is
+   * omitted and the partner must use `assetToken` + `fetch_asset` instead, so the result stays small.
+   */
+  base64: z.string().nullable().optional(),
   /**
    * One-time token for a remote partner to retrieve this asset via fetch_asset — set only when the
    * server is configured with a WebDAV/SFTP transfer target. The partner agent calls fetch_asset
@@ -199,7 +204,12 @@ export type ImageFillsResult = z.infer<typeof ImageFillsResultSchema>;
 export const SavedImageFillSchema = z.object({
   index: z.number(),
   imageHash: z.string().nullable(),
-  base64: z.string().nullable(),
+  /**
+   * Original encoded bytes for a remote partner to decode onto its own disk — returned ONLY in
+   * inline mode (no WebDAV/SFTP transfer target). When a transfer target is configured, base64 is
+   * omitted and the partner must use `assetToken` + `fetch_asset` instead, so the result stays small.
+   */
+  base64: z.string().nullable().optional(),
   format: z.string().optional(),
   path: z.string().nullable(),
   relativePath: z.string().nullable(),

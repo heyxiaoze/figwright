@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 
@@ -133,29 +132,17 @@ export const attachMcpHttp = (server: HttpServer, deps: McpHttpDeps): (() => voi
   const log = deps.log ?? ((): void => {});
   const path = deps.path ?? MCP_PATH;
 
-  // Streamable HTTP is stateful *per session*: the SDK assigns each connection a Mcp-Session-Id and an
-  // McpServer may only be initialised once. figwright is a relay, so multiple agents (and
-  // reconnects) hit this endpoint — a single shared McpServer would reject the second `initialize`
-  // with "Server already initialized". So we spin up a fresh transport+McpServer per session and key
-  // them by the SDK-assigned session id. enableJsonResponse keeps responses as plain JSON (no SSE
-  // stream), which is all figwright needs and the simplest thing to bridge back to Node.
-  const sessions = new Map<string, WebStandardStreamableHTTPServerTransport>();
-
-  const createSession = async (
-    readonly?: boolean,
-  ): Promise<WebStandardStreamableHTTPServerTransport> => {
-    const transport = new WebStandardStreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID(),
-      enableJsonResponse: true,
-    });
-    const mcp = deps.createServer(readonly);
-    await mcp.connect(transport);
-    transport.onclose = () => {
-      if (transport.sessionId) sessions.delete(transport.sessionId);
-    };
-    log(`[mcp-http] new session${readonly ? ' (read-only)' : ''}`);
-    return transport;
-  };
+  // Remote MCP over Streamable HTTP — stateless-tolerant mode.
+  //
+  // figwright is a relay: many agents (and frequent reconnects) hit /mcp, and the Figma bridge is
+  // established per tool call, so there is no cross-request session state to preserve. We therefore
+  // run the SDK transport WITHOUT a sessionIdGenerator. In that mode `validateSession` short-circuits
+  // and the server NEVER requires an `Mcp-Session-Id` header — which tolerates clients that don't
+  // forward it (several `mcp-remote` builds drop it after `initialize`, producing the confusing
+  // "Server not initialized" error against a strict server). Every request gets a fresh, independent
+  // transport+McpServer and we close the transport right after the (finite, JSON) response is written,
+  // so there is nothing to leak. enableJsonResponse keeps the body finite (no SSE stream), which is
+  // all figwright needs and the simplest thing to bridge back to Node.
 
   const handler = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     try {
@@ -178,18 +165,18 @@ export const attachMcpHttp = (server: HttpServer, deps: McpHttpDeps): (() => voi
       const clientIp = req.socket.remoteAddress ?? 'unknown';
       log(`[mcp-http] ${req.method} ${reqUrl} from ${clientIp}`);
 
-      // Reuse the existing session if the client sent a known session id; otherwise open a fresh one
-      // (a brand-new initialize, or a reconnect presenting a session we no longer have).
-      const sessionId = req.headers['mcp-session-id'];
-      let transport: WebStandardStreamableHTTPServerTransport | undefined;
-      if (typeof sessionId === 'string' && sessions.has(sessionId)) {
-        transport = sessions.get(sessionId);
-      } else {
-        // Local (loopback) connections are this machine's own agent and are always read-write,
-        // regardless of the dashboard's read-only setting. Remote (LAN) peers stay governed by the
-        // matching token's effective permission (which falls back to the server-wide read-only flag).
-        transport = await createSession(connectionReadonly(clientIp, info?.readonly));
-      }
+      // Fresh, independent transport+McpServer per request. Stateless mode (sessionIdGenerator left
+      // undefined) means the SDK never requires an `Mcp-Session-Id` header — which tolerates clients
+      // that drop it after `initialize` (several `mcp-remote` builds do, surfacing as the misleading
+      // "Server not initialized" against a strict server). Local (loopback) connections are this
+      // machine's own agent and are always read-write; remote (LAN) peers stay governed by the
+      // matching token's effective permission.
+      const transport = new WebStandardStreamableHTTPServerTransport({
+        sessionIdGenerator: undefined,
+        enableJsonResponse: true,
+      });
+      const mcp = deps.createServer(connectionReadonly(clientIp, info?.readonly));
+      await mcp.connect(transport);
 
       // Buffer the body once so we can both audit it (extract the tool name) and forward it.
       const bodyBuf = await readBodyBuffer(req);
@@ -209,11 +196,9 @@ export const attachMcpHttp = (server: HttpServer, deps: McpHttpDeps): (() => voi
       const webReq = toWebRequest(req, url, bodyBuf);
       const startedAt = Date.now();
       const webRes = await transport.handleRequest(webReq);
-      // The session id is assigned during initialize; remember it so later requests reuse this session.
-      if (transport.sessionId && !sessions.has(transport.sessionId)) {
-        sessions.set(transport.sessionId, transport);
-      }
       await writeWebResponse(res, webRes);
+      // Stateless: nothing to reuse — free the transport now that the (finite JSON) response is written.
+      void transport.close().catch(() => {});
 
       // Audit a real tool call (not initialize/ping): who, which tool, how long, success. The
       // dashboard parses these `[audit]` lines into a live activity feed and per-tool counters.
@@ -236,12 +221,8 @@ export const attachMcpHttp = (server: HttpServer, deps: McpHttpDeps): (() => voi
   };
 
   server.on('request', handler);
-  log(`[mcp-http] mounted on ${path} (remote MCP enabled)`);
+  log(`[mcp-http] mounted on ${path} (remote MCP enabled, stateless-tolerant)`);
   return (): void => {
     server.removeListener('request', handler);
-    for (const transport of sessions.values()) {
-      void transport.close().catch(() => {});
-    }
-    sessions.clear();
   };
 };
