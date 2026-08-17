@@ -27,6 +27,18 @@ export const ASSET_TOKEN_RESULT_NOTE =
   '`path` field — it is a server-side filesystem path and is unreachable from your machine. Only ' +
   'when `assetToken` is ABSENT (inline mode) is `base64` returned.';
 
+/**
+ * Carried in the `note` field of save_* results ONLY when direct-delivery mode is active. Tells the
+ * partner agent to GET the `assetUrl` directly (zero base64 over MCP) rather than reading `path` or
+ * expecting `base64`/`assetToken`.
+ */
+export const ASSET_URL_RESULT_NOTE =
+  'REMOTE TRANSFER MODE (direct delivery): base64 is OMITTED from this result. Each image carries an ' +
+  '`assetUrl` — an HTTP(S) URL you can GET directly to download the file bytes, then write them into ' +
+  'your OWN machine\'s asset directory. Do NOT use the `path` field (server-side only) and do NOT ' +
+  'expect `base64` or `assetToken`. The URL stays valid for ~10 minutes. Only when `assetUrl` is ' +
+  'ABSENT (inline mode) is `base64` returned.';
+
 export interface WebDavConfig {
   /** WebDAV root, e.g. https://dav.example.com/remote.php/webdav */
   url: string;
@@ -49,6 +61,17 @@ export interface TransferConfig {
   mode: TransferMode;
   webdav?: WebDavConfig;
   sftp?: SftpConfig;
+  /**
+   * Direct-delivery mode. When true AND a `publicBaseUrl` is set, save_* results return a download
+   * `assetUrl` (an HTTP(S) URL the partner GETs directly) instead of an `assetToken` + fetch_asset
+   * round-trip. The URL rides the server's own MCP port (peer already reaches it), so no extra
+   * network exposure and WebDAV/SFTP credentials stay server-side. The binary never crosses MCP as
+   * base64 — this is the zero-base64 path.
+   */
+  directUrl?: boolean;
+  /** Base URL the partner uses to reach THIS server, e.g. `http://192.168.1.50:3055`. Used to
+   * build `assetUrl` = `${publicBaseUrl}/asset/<token>`. Required for direct-delivery mode. */
+  publicBaseUrl?: string;
 }
 
 /** A pluggable byte store. Keys are relative to the configured sub-path. */
@@ -250,11 +273,32 @@ export class TransferManager {
     await this.store.remove(entry.key).catch(() => {});
     return { bytes, name: entry.name };
   }
+
+  /**
+   * Non-consuming peek used by the direct-delivery proxy (GET /asset/:token). Returns the bytes
+   * WITHOUT deleting the token or staged file, so a partner can retry the download within the TTL
+   * (the background sweep still reaps on expiry). Returns null for unknown/expired tokens.
+   */
+  async peek(token: string): Promise<{ bytes: Buffer; name: string } | null> {
+    const entry = this.tokens.get(token);
+    if (!entry) return null;
+    if (entry.expires < Date.now()) {
+      this.tokens.delete(token);
+      await this.store.remove(entry.key).catch(() => {});
+      return null;
+    }
+    const bytes = await this.store.download(entry.key);
+    return { bytes, name: entry.name };
+  }
 }
 
 // Module-level singleton so the pure save_* writers (and fetch_asset) can reach the configured
 // manager without threading it through every call. Set once at startup from FIGWRIGHT_TRANSFER.
 let manager: TransferManager | null = null;
+
+// Direct-delivery config (parsed from FIGWRIGHT_TRANSFER, not part of the store).
+let directUrl = false;
+let publicBaseUrl = '';
 
 export function setTransferManager(m: TransferManager | null): void {
   manager = m;
@@ -264,17 +308,38 @@ export function getTransferManager(): TransferManager | null {
   return manager;
 }
 
+/** Whether save_* should return `assetUrl` (direct delivery) instead of `assetToken`. Effective only
+ * when a transfer target is active AND both the directUrl flag and a publicBaseUrl are present. */
+export function isDirectDelivery(): boolean {
+  return manager !== null && directUrl && publicBaseUrl.trim() !== '';
+}
+
+/** Base URL the partner uses to reach this server, used to build `assetUrl`. */
+export function getPublicBaseUrl(): string {
+  return publicBaseUrl;
+}
+
+/** Build the partner-facing download URL for a staged token. */
+export const buildAssetUrl = (token: string, base: string): string =>
+  `${base.replace(/\/+$/, '')}/asset/${token}`;
+
 /** Parse FIGWRIGHT_TRANSFER (JSON) and install the manager singleton. No-op / null on missing or bad input. */
 export function initTransferManager(raw: string | undefined): void {
   if (!raw) {
     setTransferManager(null);
+    directUrl = false;
+    publicBaseUrl = '';
     return;
   }
   try {
     const cfg = JSON.parse(raw) as TransferConfig;
     const store = createAssetStore(cfg);
     setTransferManager(store ? new TransferManager(store) : null);
+    directUrl = cfg.directUrl === true;
+    publicBaseUrl = typeof cfg.publicBaseUrl === 'string' ? cfg.publicBaseUrl : '';
   } catch {
     setTransferManager(null);
+    directUrl = false;
+    publicBaseUrl = '';
   }
 }

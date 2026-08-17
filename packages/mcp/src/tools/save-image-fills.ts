@@ -10,7 +10,14 @@ import type {
 } from '@figwright/shared';
 import { z } from 'zod';
 
-import { getTransferManager, ASSET_TOKEN_RESULT_NOTE } from '../transfer.js';
+import {
+  ASSET_TOKEN_RESULT_NOTE,
+  ASSET_URL_RESULT_NOTE,
+  buildAssetUrl,
+  getPublicBaseUrl,
+  getTransferManager,
+  isDirectDelivery,
+} from '../transfer.js';
 import type { ToolSpec } from './spec.js';
 
 export const SAVE_IMAGE_FILLS_TOOL_NAME = 'save_image_fills';
@@ -153,6 +160,8 @@ export const writeImageFills = async (
   // fetch_asset, so we omit inline base64 from the result. In inline mode (no target) base64 stays.
   const mgr = getTransferManager();
   const transferActive = mgr !== null;
+  // Direct-delivery mode: hand back a download URL instead of an assetToken (zero base64 over MCP).
+  const directDelivery = isDirectDelivery();
 
   // Dedup writes by imageHash: a hash reused across nodes maps to one file written once. Track the
   // occupied paths so a different hash that sanitizes to the same name cleanly falls back to the hash.
@@ -230,12 +239,19 @@ export const writeImageFills = async (
     );
     for (const node of outNodes) {
       for (const img of node.images) {
-        if (img.path && pathToToken.has(img.path)) img.assetToken = pathToToken.get(img.path)!;
+        if (img.path && pathToToken.has(img.path)) {
+          const token = pathToToken.get(img.path)!;
+          if (directDelivery) img.assetUrl = buildAssetUrl(token, getPublicBaseUrl());
+          else img.assetToken = token;
+        }
       }
     }
   }
 
-  return { nodes: outNodes, ...(transferActive ? { note: ASSET_TOKEN_RESULT_NOTE } : {}) };
+  return {
+    nodes: outNodes,
+    ...(transferActive ? { note: directDelivery ? ASSET_URL_RESULT_NOTE : ASSET_TOKEN_RESULT_NOTE } : {}),
+  };
 };
 
 export type ToolDispatcher = (toolName: string, args: unknown) => Promise<unknown>;

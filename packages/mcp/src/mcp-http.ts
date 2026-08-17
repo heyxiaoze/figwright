@@ -6,6 +6,7 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 
 import { isAllowedHost, isLoopbackAddress } from './local-access.js';
 import type { TokenInfo, TokenRegistry } from './tokens.js';
+import { getTransferManager } from './transfer.js';
 
 /**
  * Whether a freshly-opened /mcp session should be read-only.
@@ -147,6 +148,13 @@ export const attachMcpHttp = (server: HttpServer, deps: McpHttpDeps): (() => voi
   const handler = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     try {
       const reqUrl = req.url ?? '/';
+      // Direct-delivery asset proxy: GET /asset/<token> streams the staged bytes straight to the
+      // partner's HTTP client (zero base64 over MCP). Handle it here — the single response writer —
+      // before the /mcp path + auth so it never races with the MCP handler for the same request.
+      if (req.method === 'GET' && reqUrl.startsWith(ASSET_PATH)) {
+        await serveAsset(req, res, log);
+        return;
+      }
       // Not our path: leave the response untouched so the relay / leader endpoints handle it.
       if (reqUrl !== path && !reqUrl.startsWith(`${path}?`)) return;
 
@@ -225,4 +233,69 @@ export const attachMcpHttp = (server: HttpServer, deps: McpHttpDeps): (() => voi
   return (): void => {
     server.removeListener('request', handler);
   };
+};
+
+const ASSET_PATH = '/asset/';
+const ASSET_TOKEN_RE = /^[A-Za-z0-9_-]+$/;
+
+const MIME_BY_EXT: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  bmp: 'image/bmp',
+  svg: 'image/svg+xml',
+};
+
+/**
+ * Direct-delivery proxy: GET /asset/<token> streams the staged file bytes straight to the partner's
+ * HTTP client, so the image never crosses the MCP channel as base64. The token is the only secret
+ * (24-byte base64url, unguessable), so no MCP auth header is required — a generic `curl`/`fetch` from
+ * the partner's agent can retrieve it. The byte is read via `peek` (non-consuming), allowing retries
+ * within the TTL; the background sweep still reaps expired staged files.
+ *
+ * Called from the single MCP request handler (NOT a second `server.on('request')` listener) so there
+ * is exactly one response writer — a second listener races with the MCP handler and crashes with
+ * ERR_HTTP_HEADERS_SENT when both try to write the same response.
+ */
+export const serveAsset = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  log: (msg: string) => void,
+): Promise<void> => {
+  const reqUrl = req.url ?? '';
+  const token = decodeURIComponent(reqUrl.slice(ASSET_PATH.length).split('?')[0]);
+  if (!ASSET_TOKEN_RE.test(token)) {
+    res.writeHead(400, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: 'bad asset token' }));
+    return;
+  }
+  const mgr = getTransferManager();
+  if (!mgr) {
+    res.writeHead(404, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: 'no transfer target configured' }));
+    return;
+  }
+  let asset: { bytes: Buffer; name: string } | null = null;
+  try {
+    asset = await mgr.peek(token);
+  } catch (err) {
+    log(`[asset-proxy] peek failed: ${(err as Error).message}`);
+  }
+  if (!asset) {
+    res.writeHead(404, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: 'asset not found or expired' }));
+    return;
+  }
+  const ext = asset.name.split('.').pop()?.toLowerCase() ?? '';
+  const mime = MIME_BY_EXT[ext] ?? 'application/octet-stream';
+  res.writeHead(200, {
+    'content-type': mime,
+    'content-length': asset.bytes.length,
+    'content-disposition': `attachment; filename="${asset.name}"`,
+    'cache-control': 'no-store',
+  });
+  res.end(asset.bytes);
+  log(`[asset-proxy] served ${asset.name} (${asset.bytes.length} bytes) token=${token.slice(0, 8)}…`);
 };

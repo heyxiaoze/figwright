@@ -11,7 +11,14 @@ import {
 import { z } from 'zod';
 
 import { GET_SCREENSHOT_TOOL_NAME } from './get-screenshot.js';
-import { getTransferManager, ASSET_TOKEN_RESULT_NOTE } from '../transfer.js';
+import {
+  ASSET_TOKEN_RESULT_NOTE,
+  ASSET_URL_RESULT_NOTE,
+  buildAssetUrl,
+  getPublicBaseUrl,
+  getTransferManager,
+  isDirectDelivery,
+} from '../transfer.js';
 import type { ToolSpec } from './spec.js';
 
 export const SAVE_SCREENSHOTS_TOOL_NAME = 'save_screenshots';
@@ -78,6 +85,8 @@ export const writeScreenshots = async (
   // A transfer target (WebDAV/SFTP) configured means the partner should pull bytes via assetToken +
   // fetch_asset, so we omit inline base64 from the result. In inline mode (no target) base64 stays.
   const mgr = getTransferManager();
+  // Direct-delivery mode: hand back a download URL instead of an assetToken (zero base64 over MCP).
+  const directDelivery = isDirectDelivery();
 
   const saved: SavedScreenshot[] = await Promise.all(
     images.map(async (img): Promise<SavedScreenshot> => {
@@ -106,20 +115,23 @@ export const writeScreenshots = async (
         ...flags,
       };
       // Staged transfer: when a WebDAV/SFTP target is configured, upload the bytes and hand the
-      // partner a one-time token (credentials stay server-side; they fetch via fetch_asset and the
-      // copy is deleted). base64 is omitted in this mode, so staging must succeed — any failure
-      // aborts the save rather than silently leaving the partner with neither bytes nor a token.
+      // partner a one-time token (credentials stay server-side). In direct-delivery mode that is a
+      // download URL (zero base64 over MCP); otherwise an assetToken for fetch_asset. base64 is
+      // omitted either way, so staging must succeed — any failure aborts the save rather than
+      // silently leaving the partner with neither bytes nor a token.
       if (mgr) {
-        result.assetToken = await mgr.stage(
+        const token = await mgr.stage(
           `${sanitize(img.nodeId)}.${ext}`,
           Buffer.from(img.base64, 'base64'),
         );
+        if (directDelivery) result.assetUrl = buildAssetUrl(token, getPublicBaseUrl());
+        else result.assetToken = token;
       }
       return result;
     }),
   );
 
-  return { saved, ...(mgr ? { note: ASSET_TOKEN_RESULT_NOTE } : {}) };
+  return { saved, ...(mgr ? { note: directDelivery ? ASSET_URL_RESULT_NOTE : ASSET_TOKEN_RESULT_NOTE } : {}) };
 };
 
 export type ToolDispatcher = (toolName: string, args: unknown) => Promise<unknown>;

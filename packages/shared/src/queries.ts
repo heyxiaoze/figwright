@@ -81,6 +81,13 @@ export const SavedScreenshotSchema = z.object({
    * and deletes the staged copy. Absent in inline mode and for local saves; `base64` is the fallback.
    */
   assetToken: z.string().nullable().optional(),
+  /**
+   * Direct-download URL for this asset — present only when the server is in direct-delivery mode
+   * (WebDAV/SFTP target + a configured public base URL). The partner GETs it to receive the bytes
+   * directly, with NO base64 crossing the MCP channel. Mutually exclusive with `assetToken` in a
+   * given result. Absent in inline mode.
+   */
+  assetUrl: z.string().nullable().optional(),
   empty: z.boolean().optional(),
   recovered: z.boolean().optional(),
 });
@@ -221,10 +228,17 @@ export const SavedImageFillSchema = z.object({
   relativePath: z.string().nullable(),
   /**
    * One-time fetch_asset token for a remote partner to retrieve this asset — present only when the
-   * server has a WebDAV/SFTP transfer target configured. Credentials stay server-side; the partner
-   * agent fetches via the token and the server deletes the staged copy. Absent in inline mode.
+   * server has a WebDAV/SFTP transfer target configured (and NOT in direct-delivery mode). Credentials
+   * stay server-side; the partner agent fetches via the token and the server deletes the staged copy.
+   * Absent in inline mode and in direct-delivery mode (where `assetUrl` is used instead).
    */
   assetToken: z.string().nullable().optional(),
+  /**
+   * Direct-download URL for this asset — present only in direct-delivery mode (WebDAV/SFTP target +
+   * a configured public base URL). The partner GETs it to receive the bytes directly, with NO
+   * base64 crossing the MCP channel. Mutually exclusive with `assetToken`. Absent in inline mode.
+   */
+  assetUrl: z.string().nullable().optional(),
   width: z.number().optional(),
   height: z.number().optional(),
   scaleMode: z.string().optional(),

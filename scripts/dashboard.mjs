@@ -518,6 +518,11 @@ const server = createServer(async (req, res) => {
       const t = body.transfer;
       config.transfer = {
         mode: t.mode === 'webdav' || t.mode === 'sftp' ? t.mode : 'inline',
+        // 直链模式：save 返回下载 URL（零 base64）。需配合 publicBaseUrl。
+        ...(t.directUrl === true ? { directUrl: true } : {}),
+        ...(typeof t.publicBaseUrl === 'string' && t.publicBaseUrl.trim()
+          ? { publicBaseUrl: t.publicBaseUrl.trim() }
+          : {}),
         ...(t.webdav && typeof t.webdav === 'object'
           ? { webdav: { url: String(t.webdav.url ?? ''), path: t.webdav.path ? String(t.webdav.path) : undefined, username: String(t.webdav.username ?? ''), password: String(t.webdav.password ?? '') } }
           : {}),
