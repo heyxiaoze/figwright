@@ -288,9 +288,10 @@ describe.skipIf(!existsSync(DIST_ENTRY))('MCP wire contract (built dist)', () =>
     });
   });
 
-  it('serves an out-of-date plugin without a skew warning (skew notices removed)', async () => {
-    // Skew notices were intentionally removed: checkPluginCompatibility is now always true, so an
-    // out-of-date plugin is served normally and no "OUT OF DATE" warning is attached to its results.
+  it('warns on a real tools/call when the connected plugin is out of date', async () => {
+    // The assembled product, over real stdio, against a real plugin socket. Every piece of this had
+    // unit coverage and the wiring in index.ts had none: deleting the append there left all 1387
+    // tests green. A warning that is not actually attached reaches nobody.
     const server = new WireClient();
     await server.start();
     await server.handshake(LATEST_CLIENT_PROTOCOL);
@@ -304,22 +305,22 @@ describe.skipIf(!existsSync(DIST_ENTRY))('MCP wire contract (built dist)', () =>
       const res = await server.send('tools/call', { name: 'get_selection', arguments: {} });
       const content = res.result?.content as { type: string; text: string }[];
 
-      // The result the agent asked for is returned, untouched.
+      // The result the agent asked for is untouched and still first.
       expect(JSON.parse(content[0]?.text ?? '{}')).toMatchObject({ pageName: 'Page 1' });
-      // No skew warning rides alongside it.
-      expect(content).toHaveLength(1);
-      expect(JSON.stringify(content)).not.toMatch(/OUT OF DATE/);
-      expect(JSON.stringify(content)).not.toMatch(/older than this server/i);
+      // The warning rides alongside it, not inside it.
+      expect(content).toHaveLength(2);
+      expect(content[1]?.text).toMatch(/OUT OF DATE/);
+      expect(content[1]?.text).toMatch(/older than this server/i);
     } finally {
       closeSocket(plugin);
       await server.stop();
     }
   }, 30_000);
 
-  it('returns a bare METHOD_NOT_FOUND for a tool an out-of-date plugin has no handler for', async () => {
-    // An old plugin predating a tool has no handler for it; the server returns the error without the
-    // (now-removed) skew explanation. The error is still attributed to the serving plugin; only the
-    // skew blurb is gone.
+  it('explains a METHOD_NOT_FOUND from an out-of-date plugin instead of leaving it bare', async () => {
+    // What an old plugin does loudest: nine tools in the last shipped build have no handler in it.
+    // Bare, that error reads as "this tool is broken" and the agent goes looking for another way
+    // round; attributed, the user gets told to update.
     const server = new WireClient();
     await server.start();
     await server.handshake(LATEST_CLIENT_PROTOCOL);
@@ -336,9 +337,8 @@ describe.skipIf(!existsSync(DIST_ENTRY))('MCP wire contract (built dist)', () =>
       expect(res.result?.isError).toBe(true);
       const content = res.result?.content as { type: string; text: string }[];
       const text = content.map(c => c.text).join('');
-      // No skew explanation is appended now.
-      expect(text).not.toMatch(/OUT OF DATE/);
-      expect(text).not.toMatch(/older than this server/i);
+      expect(text).toMatch(/OUT OF DATE/);
+      expect(text).toMatch(/older than this server/i);
     } finally {
       closeSocket(plugin);
       await server.stop();

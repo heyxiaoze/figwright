@@ -207,16 +207,19 @@ describe('leader endpoints', () => {
     expect(resp.result).toEqual({ ids: ['1:1', '1:2'] });
   });
 
-  it('POST /rpc carries no skew warning (skew warnings removed)', async () => {
-    // Skew warnings were removed in Figwright-Plus; the leader no longer attaches a notice even for
-    // a below-floor plugin version.
+  it('POST /rpc carries the skew warning back to the follower that asked', async () => {
+    // The production half of the warning for anyone whose MCP server is a follower — a normal
+    // state, since several servers share one plugin and only one of them holds the relay. Faking
+    // this response in the dispatch test proves the follower *reads* it; nothing proved the leader
+    // ever *writes* it. Deleting the attachment left all 1387 tests green.
     const b = await startLeader();
     await attachFakePlugin(b, async () => ({ ok: true }), '0.0.1');
 
     const resp = await callRpc(b.port, { requestId: 'r-skew', toolName: 'set_fills', args: {} });
 
     if (resp.kind !== 'ok') throw new Error(`expected ok, got ${resp.kind}`);
-    expect(resp.notice).toBeUndefined();
+    expect(resp.notice).toMatch(/older than this server/i);
+    expect(resp.notice).toMatch(/unverified/i);
   });
 
   it('POST /rpc attaches no warning for a current plugin', async () => {
