@@ -13,7 +13,7 @@ import { execSync } from 'node:child_process';
 // Skew detection was removed (checkPluginCompatibility now always returns true), so this string is
 // display-only — it no longer has to satisfy the semver comparator in packages/shared/src/version.ts.
 const MAJOR = 1;
-const MINOR = '2'; // bump +1 on each release
+const MINOR = '3'; // bump +1 on each release
 
 function buildVersion(): string {
   let sha = 'unknown';

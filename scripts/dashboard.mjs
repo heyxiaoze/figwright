@@ -40,7 +40,7 @@ const DASH_PORT = Number(process.env.DASH_PORT ?? 3056);
 // release; MINOR starts at 0 and increments by 1 on each release; the commit hash is read live so
 // the console always matches the build it runs from.
 const APP_MAJOR = 1;
-const APP_MINOR = '2'; // bump +1 on each release
+const APP_MINOR = '3'; // bump +1 on each release
 function appVersion() {
   let sha = 'dev';
   try {
