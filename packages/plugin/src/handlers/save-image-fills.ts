@@ -2,11 +2,12 @@ import type { ImageFillBytes, ImageFillsResult, NodeImageFills } from '@figwrigh
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 
-/** Bytes + intrinsic size for one resolved image hash. */
+/** Bytes + intrinsic size for one resolved image hash. Width/height are optional: some fills can't
+ * report dimensions (see fetchImage), and the bytes are what actually get saved. */
 interface ResolvedImage {
   base64: string;
-  width: number;
-  height: number;
+  width?: number;
+  height?: number;
 }
 
 /**
@@ -38,8 +39,21 @@ export const createSaveImageFillsHandler =
         pending = (async (): Promise<ResolvedImage | null> => {
           const image = figmaCtx.getImageByHash(hash);
           if (image === null) return null;
-          const [bytes, size] = await Promise.all([image.getBytesAsync(), image.getSizeAsync()]);
-          return { base64: figmaCtx.base64Encode(bytes), width: size.width, height: size.height };
+          // Read bytes first — this forces the image to load. Dimensions are only advisory metadata
+          // on the saved file; some fills (e.g. images not yet painted into the document) reject
+          // getSizeAsync() with "Image dimensions not available", so tolerate that and fall back to
+          // unknown dimensions rather than failing the whole export with INTERNAL_ERROR.
+          const bytes = await image.getBytesAsync();
+          let width: number | undefined;
+          let height: number | undefined;
+          try {
+            const size = await image.getSizeAsync();
+            width = size.width;
+            height = size.height;
+          } catch {
+            /* dimensions unavailable — omit them; bytes are still valid */
+          }
+          return { base64: figmaCtx.base64Encode(bytes), width, height };
         })();
         cache.set(hash, pending);
       }
