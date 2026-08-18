@@ -60,7 +60,7 @@ export const t = (key: keyof Messages, params?: Record<string, string | number>)
   return interpolate(template, params);
 };
 
-const SKEW_URL = 'https://github.com/heyxiaoze/figwright/releases/latest';
+const SKEW_URL = 'https://github.com/heyxiaoze/figwright-plus/releases/latest';
 
 /**
  * Localize a server-originated notice (version skew / protocol mismatch) that arrives as English

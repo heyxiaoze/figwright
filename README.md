@@ -66,7 +66,7 @@ flowchart LR
 ## 🚀 快速开始
 
 ```bash
-git clone https://github.com/heyxiaoze/figwright.git
+git clone https://github.com/heyxiaoze/figwright-plus.git
 cd figwright                 # 也可改名为 figwright-plus
 pnpm install
 pnpm build                   # 构建 MCP Server（及插件）
@@ -108,7 +108,7 @@ A：是。本机回环连接始终读写开放；**只有远端同伴**的权限
 Figwright Plus 是 [**Figwright**](https://github.com/awdr74100/figwright)（作者 [@awdr74100 (Roya)](https://github.com/awdr74100)）的一个 fork，基于 **MIT License**。本项目建立在其优秀工作之上，并感激原作者的开源贡献。
 
 - 原仓库：<https://github.com/awdr74100/figwright>
-- 本 fork 仓库：<https://github.com/heyxiaoze/figwright>
+- 本 fork 仓库：<https://github.com/heyxiaoze/figwright-plus>
 
 我们不定期向上游合并更新。如需官方版本或向上游贡献，请访问原仓库。
 

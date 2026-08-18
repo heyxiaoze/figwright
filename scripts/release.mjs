@@ -90,13 +90,13 @@ console.log(`\n  推送 ${branch} …`);
 run('git', ['push', 'origin', branch]);
 
 console.log(`  创建 GitHub Release ${tag} …`);
-// 必须显式指定仓库（记忆规则：gh 操作务必 -R heyxiaoze/figwright），
+// 必须显式指定仓库（记忆规则：gh 操作务必 -R heyxiaoze/figwright-plus），
 // 否则报 "No default remote repository has been set"。
 run('gh', [
   'release',
   'create',
   '-R',
-  'heyxiaoze/figwright',
+  'heyxiaoze/figwright-plus',
   tag,
   zipPath,
   '--title',
@@ -112,4 +112,4 @@ try {
   /* 忽略 */
 }
 
-console.log(`\n  ✔ 已发布 ${tag}：https://github.com/heyxiaoze/figwright/releases/tag/${tag}\n`);
+console.log(`\n  ✔ 已发布 ${tag}：https://github.com/heyxiaoze/figwright-plus/releases/tag/${tag}\n`);

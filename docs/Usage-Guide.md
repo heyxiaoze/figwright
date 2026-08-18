@@ -46,7 +46,7 @@
 ### Step 1 · Get the code
 
 ```bash
-git clone https://github.com/heyxiaoze/figwright.git
+git clone https://github.com/heyxiaoze/figwright-plus.git
 cd figwright            # you may rename to figwright-plus
 ```
 
