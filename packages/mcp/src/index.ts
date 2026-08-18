@@ -60,7 +60,7 @@ const SERVER_NAME = 'figwright';
 // (checkPluginCompatibility always returns true), so it no longer has to satisfy the semver
 // comparator in packages/shared/src/version.ts.
 const APP_VERSION_MAJOR = 1;
-const APP_VERSION_MINOR = '5'; // bump +1 on each release — mirrors vite.config.ts / dashboard.mjs
+const APP_VERSION_MINOR = '6'; // bump +1 on each release — mirrors vite.config.ts / dashboard.mjs
 
 function resolveServerVersion(): string {
   try {
