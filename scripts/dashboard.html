@@ -660,7 +660,7 @@ const EN = {
   'btn.stop': 'Stop',
   'btn.restart': 'Restart',
   'peers.card': 'Peers',
-  'peers.hint': 'Remote agents connect over /mcp — these are the partners you shared access with. For your local Figma plugin status, open the Figma plugin panel.',
+  'peers.hint': 'Agents connect over /mcp — your own local agent (💻) and any remote partners (🤖) you shared a token with. For your local Figma plugin status, open the Figma plugin panel.',
   'connect.card': 'Connection & partners',
   'connect.localHint': 'Local connection',
   'port.label': 'Listen port',
@@ -715,6 +715,7 @@ const EN = {
   'dash.localPlugin': 'Local Figma plugin',
   'dash.remotePlugin': 'Remote Figma plugin',
   'dash.remoteAgent': 'Remote agent',
+  'dash.localAgent': 'Local agent',
   'dash.tokenLabel': 'token: {label}',
   'dash.hits': '{n} calls',
   'dash.tokenN': 'Token {n}',
@@ -761,7 +762,7 @@ const ZH = {
   'btn.stop': '停止',
   'btn.restart': '重启',
   'peers.card': '已连同伴',
-  'peers.hint': '通过 /mcp 接入的远程智能体，即你授权的伙伴。本地 Figma 插件的连接状态请在 Figma 插件面板查看。',
+  'peers.hint': '通过 /mcp 接入的智能体：你的本机智能体（💻）与已授权令牌的远程同伴（🤖）。本地 Figma 插件的连接状态请在 Figma 插件面板查看。',
   'connect.card': '连接与同伴',
   'connect.localHint': '本机连接',
   'port.label': '监听端口',
@@ -816,6 +817,7 @@ const ZH = {
   'dash.localPlugin': '本机 Figma 插件',
   'dash.remotePlugin': '远程 Figma 插件',
   'dash.remoteAgent': '远程智能体',
+  'dash.localAgent': '本机智能体',
   'dash.tokenLabel': '令牌：{label}',
   'dash.hits': '{n} 次',
   'dash.tokenN': '令牌 {n}',
@@ -999,16 +1001,17 @@ function render(status) {
   if (!status.peers.length) {
     pl.innerHTML = '<div class="empty">' + t('dash.noPeers') + '</div>';
   } else {
-    const icon = { 'local-plugin': '🔌', 'remote-plugin': '🧩', 'remote-agent': '🤖' };
+    const icon = { 'local-plugin': '🔌', 'remote-plugin': '🧩', 'local-agent': '💻', 'remote-agent': '🤖' };
     pl.innerHTML = status.peers.map(p => {
       const ic = icon[p.type] || '🌐';
       const name =
         p.type === 'local-plugin' ? t('dash.localPlugin')
         : p.type === 'remote-plugin' ? t('dash.remotePlugin')
-        : p.type === 'remote-agent' ? t('dash.remoteAgent')
+        : p.type === 'local-agent' ? t('dash.localAgent')
+        : p.type === 'remote-agent' ? (p.tokenLabel && p.tokenLabel !== 'local' ? p.tokenLabel : t('dash.remoteAgent'))
         : p.ip;
       const sub = [
-        p.tokenLabel ? t('dash.tokenLabel', { label: p.tokenLabel }) : null,
+        p.tokenLabel && p.tokenLabel !== 'local' ? t('dash.tokenLabel', { label: p.tokenLabel }) : null,
         p.ip, rel(p.lastSeen),
       ].filter(Boolean).join(' · ');
       const on = p.connected !== false;

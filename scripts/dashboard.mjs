@@ -105,16 +105,23 @@ saveConfig(); // 确保文件存在，方便用户之后手动改
 let serverProc = null;
 let startedAt = 0;
 const logLines = []; // 滚动日志
-// ip -> { type, tokenLabel, firstSeen, lastSeen, count, connected }
+// key(=ip|type) -> { ip, type, tokenLabel, firstSeen, lastSeen, count, connected }
+// Keyed by ip+type (not ip alone) so a loopback agent (127.0.0.1|local-agent) and the loopback
+// Figma plugin (127.0.0.1|local-plugin) become two distinct cards instead of colliding.
 const peers = new Map();
 const audit = []; // { ts, peer, ip, token, tool, ok, durMs }
 
-function recordPeer(ip, patch) {
+const isLoopbackIp = (ip) =>
+  ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1' || ip === 'localhost';
+
+function recordPeer(key, patch) {
   const now = Date.now();
-  const prev = peers.get(ip) || { firstSeen: now, count: 0 };
+  const prev = peers.get(key) || { firstSeen: now, count: 0 };
   const next = { ...prev, ...patch, lastSeen: now };
   if (patch.connected === true) next.count = prev.count + 1;
-  peers.set(ip, next);
+  if (next.ip === undefined) next.ip = key.split('|')[0];
+  if (next.type === undefined) next.type = key.split('|')[1];
+  peers.set(key, next);
 }
 
 // 本地时间 HH:MM:SS（服务端跑在用户本机 Mac，与查看者同一时区；不再用 toISOString 的 UTC）
@@ -135,14 +142,17 @@ function pushLog(line) {
   //   [mcp-http] ... from <ip>  （远程 agent 的兜底来源）
   let m;
   m = line.match(/\[peer\] connect type=(\S+) ip=(\S+) token=(\S+)/);
-  if (m) recordPeer(m[2], { type: m[1], tokenLabel: m[3], connected: true });
+  if (m) recordPeer(`${m[2]}|${m[1]}`, { ip: m[2], type: m[1], tokenLabel: m[3], connected: true });
   m = line.match(/\[peer\] disconnect type=(\S+) ip=(\S+)/);
-  if (m) recordPeer(m[2], { connected: false });
+  if (m) recordPeer(`${m[2]}|${m[1]}`, { connected: false });
   m = line.match(/\[mcp-http\][^\n]*from\s+([\d.a-fA-F:]+)/);
   if (m) {
     const ip = m[1];
-    if (!peers.has(ip)) recordPeer(ip, { type: 'remote-agent' });
-    else if (peers.get(ip).type === undefined) peers.get(ip).type = 'remote-agent';
+    const type = isLoopbackIp(ip) ? 'local-agent' : 'remote-agent';
+    const key = `${ip}|${type}`;
+    // Create the card if the server didn't announce it (defensive), otherwise just refresh lastSeen
+    // so an active agent/partner stays "on" without re-emitting a connect line every request.
+    recordPeer(key, peers.has(key) ? {} : { ip, type, connected: true });
   }
   m = line.match(
     /\[audit\] tool_call peer=(\S+) ip=(\S+) token=(\S+) tool=(\S+) ok=(\S+) durMs=(\d+)/,
@@ -547,9 +557,9 @@ const server = createServer(async (req, res) => {
       guide,
       tokens: config.tokens,
       primaryToken: primaryTokenOf(config),
-      peers: [...peers.entries()].map(([ip, v]) => ({
-        ip,
-        type: v.type,
+      peers: [...peers.entries()].map(([key, v]) => ({
+        ip: v.ip ?? key.split('|')[0],
+        type: v.type ?? key.split('|')[1],
         tokenLabel: v.tokenLabel,
         connected: v.connected !== false,
         count: v.count,

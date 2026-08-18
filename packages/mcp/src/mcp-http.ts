@@ -132,6 +132,12 @@ const writeUnauthorized = (res: ServerResponse): void => {
 export const attachMcpHttp = (server: HttpServer, deps: McpHttpDeps): (() => void) => {
   const log = deps.log ?? ((): void => {});
   const path = deps.path ?? MCP_PATH;
+  // Stateless mode has no persistent connection, so we can't hook a real "disconnect". Instead we
+  // surface each /mcp client to the console by emitting a `[peer] connect` once per client IP on
+  // first contact (the relay already does this for Figma-plugin sockets). The dashboard then shows a
+  // distinct, correctly-typed card (local-agent vs remote-agent) rather than collapsing every
+  // loopback address onto the plugin's entry.
+  const seenPeers = new Set<string>();
 
   // Remote MCP over Streamable HTTP — stateless-tolerant mode.
   //
@@ -172,6 +178,13 @@ export const attachMcpHttp = (server: HttpServer, deps: McpHttpDeps): (() => voi
 
       const clientIp = req.socket.remoteAddress ?? 'unknown';
       log(`[mcp-http] ${req.method} ${reqUrl} from ${clientIp}`);
+      const peerType = isLoopbackAddress(clientIp) ? 'local-agent' : 'remote-agent';
+      // First contact from this client IP: announce it as a peer so the dashboard can show a
+      // correctly-typed card. token is the token label (or 'local' for loopback, which needs none).
+      if (!seenPeers.has(clientIp)) {
+        seenPeers.add(clientIp);
+        log(`[peer] connect type=${peerType} ip=${clientIp} token=${info?.label ?? 'local'}`);
+      }
 
       // Fresh, independent transport+McpServer per request. Stateless mode (sessionIdGenerator left
       // undefined) means the SDK never requires an `Mcp-Session-Id` header — which tolerates clients
@@ -213,7 +226,6 @@ export const attachMcpHttp = (server: HttpServer, deps: McpHttpDeps): (() => voi
       if (toolName !== undefined) {
         const durMs = Date.now() - startedAt;
         const tokenLabel = info?.label ?? 'local';
-        const peerType = clientIp === '127.0.0.1' || clientIp === '::1' ? 'local-agent' : 'remote-agent';
         log(
           `[audit] tool_call peer=${peerType} ip=${clientIp} token=${tokenLabel} ` +
             `tool=${toolName} ok=${webRes.ok} durMs=${durMs}`,
