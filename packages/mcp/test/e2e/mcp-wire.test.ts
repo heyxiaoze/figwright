@@ -445,4 +445,52 @@ describe.skipIf(!existsSync(DIST_ENTRY))('MCP wire contract (built dist)', () =>
     // The hard-exit backstop fires at 5s; a graceful exit should be far inside that.
     expect(Date.now() - started).toBeLessThan(4_000);
   }, 30_000);
+
+  it('routes an explicit sessionId to the named file, not the most-active one', async () => {
+    // The whole point of the selector: when the plugin is open in several Figma files at once, a
+    // peer can address a specific one instead of being forced onto whichever file was last touched.
+    const server = new WireClient();
+    await server.start();
+    await server.handshake(LATEST_CLIENT_PROTOCOL);
+
+    // Two Figma files = two plugin sessions. Connect B after A so B becomes the most-active.
+    const sidA = 'session-file-a';
+    const sidB = 'session-file-b';
+    const pluginA = await connectFakePlugin({
+      port: server.port,
+      sessionId: sidA,
+      handlers: { get_selection: () => ({ pageId: '1:1', pageName: 'FILE-A', nodes: [] }) },
+    });
+    const pluginB = await connectFakePlugin({
+      port: server.port,
+      sessionId: sidB,
+      handlers: { get_selection: () => ({ pageId: '2:2', pageName: 'FILE-B', nodes: [] }) },
+    });
+
+    try {
+      // No selector → implicit routing hits the most-active file (B).
+      const implicit = await server.send('tools/call', { name: 'get_selection', arguments: {} });
+      const implicitText = JSON.parse(
+        ((implicit.result?.content as { type: string; text: string }[])[0]?.text ?? '{}'),
+      );
+      expect(implicitText.pageName).toBe('FILE-B');
+
+      // Explicit sessionId → targets FILE-A even though B is the active one.
+      const explicit = await server.send('tools/call', {
+        name: 'get_selection',
+        arguments: { sessionId: sidA },
+      });
+      const explicitText = JSON.parse(
+        ((explicit.result?.content as { type: string; text: string }[])[0]?.text ?? '{}'),
+      );
+      expect(explicitText.pageName).toBe('FILE-A');
+
+      // And the selector field does not leak to the plugin: the responded object has no sessionId.
+      expect(explicitText).not.toHaveProperty('sessionId');
+    } finally {
+      closeSocket(pluginA);
+      closeSocket(pluginB);
+      await server.stop();
+    }
+  }, 30_000);
 });

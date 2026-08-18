@@ -11,6 +11,7 @@ import { localInterfaceHosts } from './local-access.js';
 import pkg from '../package.json' with { type: 'json' };
 import { BUILD_ID } from './build-id.js';
 import { dispatchTool, resolveRoutingSession } from './dispatch.js';
+import { z } from 'zod';
 import { Election } from './election/election.js';
 import { Follower } from './election/follower.js';
 import { attachLeaderEndpoints } from './election/leader-endpoints.js';
@@ -37,6 +38,12 @@ import { handleSaveScreenshots, SAVE_SCREENSHOTS_TOOL_NAME } from './tools/save-
 import { FETCH_ASSET_TOOL_NAME, assetContent } from './tools/fetch-asset.js';
 import { getTransferManager, initTransferManager } from './transfer.js';
 import { handleScanComponents, SCAN_COMPONENTS_TOOL_NAME } from './tools/scan-components.js';
+import {
+  extractSessionId,
+  SESSION_ID_DESCRIPTION,
+  SESSION_ID_FIELD,
+  stripSessionId,
+} from './tools/session-selector.js';
 import { captureSkew, withSkewNotice } from './tools/skew-notice.js';
 import { handleTokenMap, TOKEN_MAP_TOOL_NAME } from './tools/token-map.js';
 
@@ -215,16 +222,26 @@ node.onRoleChange(role => {
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<CallToolResult>;
 
-const dispatch = (tool: string, args: unknown): Promise<unknown> =>
-  dispatchTool({ node, follower, log }, tool, args);
+/** A dispatcher that routes a tool call, optionally pinned to a specific plugin session. */
+type Dispatcher = (tool: string, args: unknown) => Promise<unknown>;
 
-// A session-pinned dispatcher for multi-call tools: resolve the active plugin once, then route
-// every sub-call to that exact session so they can't drift across plugins if routing flips
-// mid-flight. Resolving to undefined (no plugin connected) falls back to live per-call routing.
-const routedDispatch = async (): Promise<typeof dispatch> => {
-  const sessionId = await resolveRoutingSession({ node, follower, log });
-  const opts = sessionId === undefined ? {} : { sessionId };
-  return (tool, args) => dispatchTool({ node, follower, log }, tool, args, opts);
+/**
+ * Build a dispatcher pinned to `sessionId` (when given) or the implicit most-recently-active
+ * session (when undefined). The selector field is stripped from the arguments before they reach
+ * the relay — and therefore the plugin — which never learns about server-side routing.
+ */
+const makeDispatch = (sessionId?: string): Dispatcher => {
+  const opts = sessionId !== undefined ? { sessionId } : {};
+  return (tool, args) => dispatchTool({ node, follower, log }, tool, stripSessionId(args), opts);
+};
+
+// A session-pinned dispatcher for multi-call tools: resolve the active plugin once (or honor an
+// explicit `sessionId` from the call), then route every sub-call to that exact session so they
+// can't drift across plugins if routing flips mid-flight. Resolving to undefined (no plugin
+// connected, and no explicit id) falls back to live per-call routing.
+const routedDispatch = async (requestedSessionId?: string): Promise<Dispatcher> => {
+  const pinned = requestedSessionId ?? (await resolveRoutingSession({ node, follower, log }));
+  return makeDispatch(pinned);
 };
 
 const textResult = (data: unknown): CallToolResult => ({
@@ -233,8 +250,13 @@ const textResult = (data: unknown): CallToolResult => ({
 
 // Tools whose result isn't just JSON.stringify(dispatch(...)): ping reports election state, the
 // server-local tools read the filesystem (some reusing dispatch), and get_screenshot returns an
-// image content block. Everything else takes the generic dispatch path below.
-const SPECIAL_HANDLERS: Record<string, ToolHandler> = {
+// image content block. Everything else takes the generic dispatch path below. The `dispatch`
+// parameter each receives is the per-call session-aware dispatcher, so an explicit `sessionId`
+// from the tool call routes every internal sub-dispatch to the targeted file.
+const buildSpecialHandlers = (
+  sessionDispatch: Dispatcher,
+  requestedSessionId: string | undefined,
+): Record<string, ToolHandler> => ({
   [pingTool.name]: async () => ({
     content: [
       {
@@ -254,17 +276,17 @@ const SPECIAL_HANDLERS: Record<string, ToolHandler> = {
     ],
   }),
   [SAVE_SCREENSHOTS_TOOL_NAME]: async args =>
-    textResult(await handleSaveScreenshots(dispatch, args)),
+    textResult(await handleSaveScreenshots(sessionDispatch, args)),
   [SAVE_IMAGE_FILLS_TOOL_NAME]: async args =>
-    textResult(await handleSaveImageFills(dispatch, args)),
-  [EXPORT_PDF_TOOL_NAME]: async args => textResult(await handleExportPdf(dispatch, args)),
-  [EXPORT_VIDEO_TOOL_NAME]: async args => textResult(await handleExportVideo(dispatch, args)),
+    textResult(await handleSaveImageFills(sessionDispatch, args)),
+  [EXPORT_PDF_TOOL_NAME]: async args => textResult(await handleExportPdf(sessionDispatch, args)),
+  [EXPORT_VIDEO_TOOL_NAME]: async args => textResult(await handleExportVideo(sessionDispatch, args)),
   // forVision marks this as the path whose rasters are inlined into the model's context, so the
   // sandbox caps an oversized scale to what a vision model can actually resolve. save_screenshots
   // dispatches the same tool without it — those bytes go to disk and keep the caller's scale.
   [GET_SCREENSHOT_TOOL_NAME]: async args => ({
     content: screenshotContent(
-      (await dispatch(GET_SCREENSHOT_TOOL_NAME, {
+      (await sessionDispatch(GET_SCREENSHOT_TOOL_NAME, {
         ...args,
         forVision: true,
       })) as GetScreenshotResult,
@@ -273,10 +295,11 @@ const SPECIAL_HANDLERS: Record<string, ToolHandler> = {
   [ANALYZE_PROJECT_TOOL_NAME]: async args => textResult(await handleAnalyzeProject(args)),
   [SCAN_COMPONENTS_TOOL_NAME]: async args => textResult(await handleScanComponents(args)),
   [COMPONENT_MAP_TOOL_NAME]: async args =>
-    textResult(await handleComponentMap(await routedDispatch(), args)),
-  [TOKEN_MAP_TOOL_NAME]: async args => textResult(await handleTokenMap(dispatch, args)),
-  [ICON_MAP_TOOL_NAME]: async args => textResult(await handleIconMap(await routedDispatch(), args)),
-  [DESIGN_DIFF_TOOL_NAME]: async args => textResult(await handleDesignDiff(dispatch, args)),
+    textResult(await handleComponentMap(await routedDispatch(requestedSessionId), args)),
+  [TOKEN_MAP_TOOL_NAME]: async args => textResult(await handleTokenMap(sessionDispatch, args)),
+  [ICON_MAP_TOOL_NAME]: async args =>
+    textResult(await handleIconMap(await routedDispatch(requestedSessionId), args)),
+  [DESIGN_DIFF_TOOL_NAME]: async args => textResult(await handleDesignDiff(sessionDispatch, args)),
   // Remote partners redeem a one-time asset token here: the server pulls the staged file from its
   // WebDAV/SFTP store (credentials never leave the server), returns the bytes, and deletes the copy.
   [FETCH_ASSET_TOOL_NAME]: async args => {
@@ -293,8 +316,8 @@ const SPECIAL_HANDLERS: Record<string, ToolHandler> = {
   // payload-size net + below-full note. Internal dispatches (design_diff, component/icon map) call
   // the tool directly and stay raw.
   [GET_DESIGN_CONTEXT_TOOL_NAME]: async args =>
-    textResult(await handleDesignContext(dispatch, args)),
-};
+    textResult(await handleDesignContext(sessionDispatch, args)),
+});
 
 // serveStdio owns the era decision for the connection: it reads the opening exchange, pins ONE
 // instance from this factory for the connection's lifetime, and passes everything after straight
@@ -313,32 +336,42 @@ const createMcpServer = (readonlyOverride?: boolean): McpServer => {
   );
 
   for (const spec of filterToolSpecs(ALL_TOOL_SPECS, { readonly })) {
-    const run: ToolHandler =
-      SPECIAL_HANDLERS[spec.name] ??
-      (async args => {
-        // Inject a stable idempotency key for writes before the (possibly retrying) dispatch.
-        const dispatchArgs = spec.kind === 'write' ? { ...args, requestId: newId() } : args;
-        return textResult(await dispatch(spec.name, dispatchArgs));
-      });
-    // Normalize id args (a pasted Figma URL or dash-form node id → canonical colon id) once here, so
-    // every tool — generic or special-cased — accepts them without per-handler conversion.
-    // An older plugin drops arguments it predates and still answers `{ ok: true }`, so the result
-    // cannot be trusted on its face and nothing in it says so. Saying it here, on every affected
-    // call, is what replaces the refusal this used to be: the agent is told before it reports
-    // success to the user.
-    const handler: ToolHandler = async args =>
-      captureSkew(
-        () => run(normalizeIdArgs(args)),
+    const handler: ToolHandler = async rawArgs => {
+      // A peer may pin the call to a specific connected Figma file (session) instead of the
+      // implicit most-recently-active one. The selector is extracted here and bound into the
+      // dispatcher so every internal sub-dispatch (save_*, design_diff, …) targets the same file.
+      const sessionId = extractSessionId(rawArgs);
+      const sessionDispatch = makeDispatch(sessionId);
+      const special = buildSpecialHandlers(sessionDispatch, sessionId);
+      const run: ToolHandler =
+        special[spec.name] ??
+        (async args => {
+          // Inject a stable idempotency key for writes before the (possibly retrying) dispatch.
+          const dispatchArgs = spec.kind === 'write' ? { ...args, requestId: newId() } : args;
+          return textResult(await sessionDispatch(spec.name, dispatchArgs));
+        });
+      // Normalize id args (a pasted Figma URL or dash-form node id → canonical colon id) once here,
+      // so every tool — generic or special-cased — accepts them without per-handler conversion.
+      // An older plugin drops arguments it predates and still answers `{ ok: true }`, so the result
+      // cannot be trusted on its face and nothing in it says so. Saying it here, on every affected
+      // call, is what replaces the refusal this used to be: the agent is told before it reports
+      // success to the user.
+      return captureSkew(
+        () => run(normalizeIdArgs(rawArgs)),
         (result, notice) => withSkewNotice(result, notice),
       );
-    // The spec's own Zod object goes straight through: it is already the Standard Schema object the
-    // SDK wants. Registering heterogeneous specs through one loop needed a handler cast under v1;
-    // v2's typing accepts ToolHandler directly, so the result stays checked against CallToolResult.
+    };
+    // The spec's own Zod object, extended with the optional session selector, goes through: it is
+    // already the Standard Schema object the SDK wants. Registering heterogeneous specs through one
+    // loop needed a handler cast under v1; v2's typing accepts ToolHandler directly, so the result
+    // stays checked against CallToolResult.
     mcp.registerTool(
       spec.name,
       {
         description: spec.description,
-        inputSchema: spec.inputSchema,
+        inputSchema: spec.inputSchema.extend({
+          [SESSION_ID_FIELD]: z.string().optional().describe(SESSION_ID_DESCRIPTION),
+        }),
         annotations: annotationsFor(spec),
       },
       handler,

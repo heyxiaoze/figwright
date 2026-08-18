@@ -13,8 +13,9 @@
 5. [Part 3: How generated images reach the collaborator's machine](#5-part-3-how-generated-images-reach-the-collaborators-machine)
 6. [Part 4: Permissions and read-only mode](#6-part-4-permissions-and-read-only-mode)
 7. [Part 5: The web console in detail](#7-part-5-the-web-console-in-detail)
-8. [Part 6: Troubleshooting](#8-part-6-troubleshooting)
-9. [Appendix: Config & environment variable reference](#9-appendix-config--environment-variable-reference)
+8. [Part 6: Multi-file routing & targeting (page location + explicit file selection)](#8-part-6-multi-file-routing--targeting-page-location--explicit-file-selection)
+9. [Part 7: Troubleshooting](#9-part-7-troubleshooting)
+10. [Appendix: Config & environment variable reference](#10-appendix-config--environment-variable-reference)
 
 ---
 
@@ -294,7 +295,67 @@ The console stores secrets in **`scripts/.figwright-dashboard.json`** (gitignore
 
 ---
 
-## 8. Part 6: Troubleshooting
+## 8. Part 6: Multi-file routing & targeting (page location + explicit file selection)
+
+The Figwright-Plus plugin operates on the **entire Figma file, not just the current page**. That means: as long as the plugin is open, any tool can read from or write to **any page** in the file — provided you first "locate" the target page. Two topics below: ① locating a page within one file; ② when the plugin is open in several files at once, how the server and collaborator know *which file* you mean.
+
+### 8.1 Locating a page within one file
+
+- Call `get_document` → it returns `pages[]`, where each entry has `id` and `name` (the full page list from Figma's left sidebar).
+- Then call `navigate_to_page({ pageId })` to move the plugin's context pointer to that page.
+- Subsequent tools (`get_selection` / `get_design_context` / `save_*`, …) then act on the page you switched to.
+- You can read other pages without switching: `get_document` hands you the whole file's page structure in one shot; use `navigate_to_page` only when you need to *activate a page before exporting/writing* to it.
+
+> 💡 Key point: **the current page is just the plugin's context pointer, not a capability boundary**. Inactive pages are still readable (via `get_document`'s `pages[]`); to write or export a page's content, switch to it with `navigate_to_page` first.
+
+### 8.2 Plugin open in several files: how to target "which file"
+
+Every Figma file with the plugin open = one independent **plugin session**. When you have the plugin open in several Figma files at once, the server sees multiple sessions simultaneously.
+
+**Default behavior (implicit routing)**: a tool call routes to the **most-recently-active file** — the one you last interacted with in Figma. This is ideal for a collaborator driving one file at a time: they don't need to care about file names and can just issue commands.
+
+**How to see which files are connected**: call the `ping` tool. Its `sessions` block returns a "who's connected, and where" table:
+
+```json
+{
+  "sessions": {
+    "routedSessionId": "session-file-a",
+    "routedFileName": "Brand Kit",
+    "routedPageName": "Colors",
+    "all": [
+      { "id": "session-file-a", "fileName": "Brand Kit",  "pageName": "Colors", "lastActivityAt": 1723900000000 },
+      { "id": "session-file-b", "fileName": "Mobile App", "pageName": "Home",   "lastActivityAt": 1723899000000 }
+    ]
+  }
+}
+```
+
+- `all[]`: every connected session, **sorted newest-activity-first**, each with `id`, `fileName`, `pageName`, `lastActivityAt`.
+- `routedSessionId` / `routedFileName` / `routedPageName`: the file actually hit by the last **implicit** call (i.e. the "most recently active" one).
+- The console (http://127.0.0.1:3056) peers/connections area also lists these sessions with their file/page labels, so the designer can see at a glance how many files are attached and which page each is on.
+
+### 8.3 Explicit file selection: `sessionId`
+
+When the plugin is open in several files and you want to **pin a specific file** (rather than the most-recently-active one), every tool accepts an optional **`sessionId`** argument:
+
+```json
+// Make get_design_context hit the "Brand Kit" file, not the most-recently-active "Mobile App"
+{
+  "pageId": "...",
+  "sessionId": "session-file-a"
+}
+```
+
+- The `sessionId` value comes from `ping`'s `all[].id`.
+- **Omit `sessionId`** → implicit routing (most-recently-active file); behavior is identical to before.
+- `sessionId` is a **server-side routing instruction**: the server strips it from the arguments before forwarding to the plugin — the **plugin never sees this field**, and the file itself is unaffected.
+- Server-local tools (`ping`, `fetch_asset`, `analyze_project`, and other file-agnostic tools) ignore `sessionId`.
+
+> 🔒 Isolation note: explicit file selection only changes *which already-connected Figma file* a call hits; it does not change the token's permission boundary (a read-only token stays read-only). It solves *addressing when multiple files are live*, not permissions.
+
+---
+
+## 9. Part 7: Troubleshooting
 
 | Symptom | Likely cause | Fix |
 | :--- | :--- | :--- |
@@ -308,7 +369,7 @@ The console stores secrets in **`scripts/.figwright-dashboard.json`** (gitignore
 
 ---
 
-## 9. Appendix: Config & environment variable reference
+## 10. Appendix: Config & environment variable reference
 
 The MCP Server's behavior is driven by **environment variables**; the console simply writes these as config and passes them to the server. To run the server directly without the console, use the variables below:
 
