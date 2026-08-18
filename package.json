@@ -3,15 +3,15 @@
   "version": "0.0.0",
   "private": true,
   "description": "Free, two-way Figma MCP server. Turn designs into framework-aware code, and push code back to the canvas. Works with Claude Code, Cursor, Codex, and any MCP client.",
-  "homepage": "https://github.com/awdr74100/figwright",
+  "homepage": "https://github.com/heyxiaoze/figwright",
   "bugs": {
-    "url": "https://github.com/awdr74100/figwright/issues"
+    "url": "https://github.com/heyxiaoze/figwright/issues"
   },
   "license": "MIT",
   "author": "Roya <a78945612385238@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "https://github.com/awdr74100/figwright.git"
+    "url": "https://github.com/heyxiaoze/figwright.git"
   },
   "type": "module",
   "scripts": {

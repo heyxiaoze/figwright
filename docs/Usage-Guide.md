@@ -78,6 +78,11 @@ Once started:
 
 > 🖥️ The console binds only to `127.0.0.1` (local, safe). What is actually exposed is the MCP Server (`:3055`) it supervises, bound to `0.0.0.0` so LAN collaborators can reach it.
 
+> 📸 **Screenshot placeholder (to be added)**: `docs/assets/console-overview.png`
+> Suggested view: the console home — version badge at top (e.g. `v1.4-…`), the Status card (server online / local IP / connection count), a `local-plugin connected` entry, dark theme.
+>
+> ![Console overview](./assets/console-overview.png)
+
 ### Step 5 · Import the plugin into Figma
 
 The plugin must be installed in your Figma. Two options:
@@ -128,6 +133,11 @@ sequenceDiagram
    - **readonly**: check it if the collaborator should only *read* designs (figma-to-code) and not modify your files; leave unchecked to allow writing back to the canvas.
    - **value**: auto-generated or custom.
 3. After saving, copy the token's **value** and send it to the collaborator (treat it like a password, send over a private channel).
+
+> 📸 **Screenshot placeholder (to be added)**: `docs/assets/console-tokens.png`
+> Suggested view: the Tokens card — the "New token" dialog filled with a label (e.g. `Alice's VSCode`), the `readonly` checkbox ticked, an auto-generated value, and the saved token listed below.
+>
+> ![Tokens card](./assets/console-tokens.png)
 
 ### Step 2 · Tell the collaborator your LAN IP
 
@@ -255,6 +265,11 @@ The console (http://127.0.0.1:3056) is the "cockpit" for the whole stack:
 | **Start/Stop** | One-click Start / Stop / Restart the MCP Server (a watchdog auto-restarts it after an unexpected exit). |
 | **Activity audit** | Live `[peer]` connections and `[audit]` tool calls (who, which tool, duration, success). |
 | **Theme / Language** | Dark / light, 中文 / English, preference saved locally. |
+
+> 📸 **Screenshot placeholder (to be added)**: `docs/assets/console-transfer.png`
+> Suggested view: the Transfer card — `webdav` / `sftp` / `direct` mode selected, the corresponding credential fields expanded (stored server-side only), and the active mode shown.
+>
+> ![Transfer card](./assets/console-transfer.png)
 
 ### Config file
 
