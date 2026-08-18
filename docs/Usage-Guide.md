@@ -134,10 +134,9 @@ sequenceDiagram
    - **value**: auto-generated or custom.
 3. After saving, copy the token's **value** and send it to the collaborator (treat it like a password, send over a private channel).
 
-> 📸 **Screenshot placeholder (to be added)**: `docs/assets/console-tokens.png`
-> Suggested view: the Tokens card — the "New token" dialog filled with a label (e.g. `Alice's VSCode`), the `readonly` checkbox ticked, an auto-generated value, and the saved token listed below.
+> 📸 **Tokens card**: The console overview above already shows the token creation area; you can also view the peer list separately:
 >
-> ![Tokens card](./assets/console-tokens.png)
+> ![Peers list](./assets/console-peers.png)
 
 ### Step 2 · Tell the collaborator your LAN IP
 
@@ -266,10 +265,13 @@ The console (http://127.0.0.1:3056) is the "cockpit" for the whole stack:
 | **Activity audit** | Live `[peer]` connections and `[audit]` tool calls (who, which tool, duration, success). |
 | **Theme / Language** | Dark / light, 中文 / English, preference saved locally. |
 
-> 📸 **Screenshot placeholder (to be added)**: `docs/assets/console-transfer.png`
-> Suggested view: the Transfer card — `webdav` / `sftp` / `direct` mode selected, the corresponding credential fields expanded (stored server-side only), and the active mode shown.
+> 📸 **Transfer card (WebDAV mode example)**:
 >
-> ![Transfer card](./assets/console-transfer.png)
+> ![Transfer card - WebDAV](./assets/console-transfer-webdav.png)
+>
+> SFTP mode is similar:
+>
+> ![Transfer card - SFTP](./assets/console-transfer-sftp.png)
 
 ### Config file
 
